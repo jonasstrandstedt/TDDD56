@@ -1,3 +1,6 @@
 
 
 1. The black pixels takes longer to compute due to reaching max iterations. If one chunk has lots of pixels reaching max iterations makes it slower than others.
+
+2. Split the image in more blocks/chunks than there are threads, if the blocks are distributed venly the heavy chunks will be distributed to more threads.
+
