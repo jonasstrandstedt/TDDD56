@@ -25,6 +25,7 @@ LOADBALANCE=0
 MANDELBROT_COLOR=0
 GLUT=0
 
+CC=gcc
 MEASURE_FLAG=$(if $(MEASURE),-DMEASURE,)
 DEBUG_FLAG=$(if $(DEBUG),-DDEBUG,)
 ## -O3 -msse2 -mfpmath=sse -ftree-vectorize -funroll-loops
@@ -35,6 +36,7 @@ ifeq ($(OS),Linux)
 	# linux link flags and microglut version
 	LDFLAGS=-lrt -lglut -lGL -lGLU -lGLEW -lX11 -lm
 else ifeq ($(OS),Darwin)
+	CC=clang
 	# mac link flags and microglut version
 	LDFLAGS=-framework GLUT -framework Cocoa -framework OpenGL -lm -lpthread
 else ifeq ($(OS),MinGW)
@@ -49,16 +51,16 @@ clean:
 	$(RM) *.o
 
 mandelbrot-$(MAXITER)-$(WIDTH)-$(HEIGHT)-$(LOWER_R)-$(UPPER_R)-$(LOWER_I)-$(UPPER_I)-$(NB_THREADS)-$(LOADBALANCE): mandelbrot_main.c mandelbrot-$(MAXITER)-$(WIDTH)-$(HEIGHT)-$(LOWER_R)-$(UPPER_R)-$(LOWER_I)-$(UPPER_I)-$(NB_THREADS)-$(LOADBALANCE).o ppm.o gl_mandelbrot.o
-	clang $(CFLAGS) -o mandelbrot-$(MAXITER)-$(WIDTH)-$(HEIGHT)-$(LOWER_R)-$(UPPER_R)-$(LOWER_I)-$(UPPER_I)-$(NB_THREADS)-$(LOADBALANCE) mandelbrot-$(MAXITER)-$(WIDTH)-$(HEIGHT)-$(LOWER_R)-$(UPPER_R)-$(LOWER_I)-$(UPPER_I)-$(NB_THREADS)-$(LOADBALANCE).o ppm.o gl_mandelbrot.o mandelbrot_main.c $(LDFLAGS)
+	$(CC) $(CFLAGS) -o mandelbrot-$(MAXITER)-$(WIDTH)-$(HEIGHT)-$(LOWER_R)-$(UPPER_R)-$(LOWER_I)-$(UPPER_I)-$(NB_THREADS)-$(LOADBALANCE) mandelbrot-$(MAXITER)-$(WIDTH)-$(HEIGHT)-$(LOWER_R)-$(UPPER_R)-$(LOWER_I)-$(UPPER_I)-$(NB_THREADS)-$(LOADBALANCE).o ppm.o gl_mandelbrot.o mandelbrot_main.c $(LDFLAGS)
 
 mandelbrot-$(MAXITER)-$(WIDTH)-$(HEIGHT)-$(LOWER_R)-$(UPPER_R)-$(LOWER_I)-$(UPPER_I)-$(NB_THREADS)-$(LOADBALANCE).o: mandelbrot.c
-	clang $(CFLAGS) -c -o mandelbrot-$(MAXITER)-$(WIDTH)-$(HEIGHT)-$(LOWER_R)-$(UPPER_R)-$(LOWER_I)-$(UPPER_I)-$(NB_THREADS)-$(LOADBALANCE).o mandelbrot.c
+	$(CC) $(CFLAGS) -c -o mandelbrot-$(MAXITER)-$(WIDTH)-$(HEIGHT)-$(LOWER_R)-$(UPPER_R)-$(LOWER_I)-$(UPPER_I)-$(NB_THREADS)-$(LOADBALANCE).o mandelbrot.c
 	
 ppm.o: ppm.c
-	clang $(CFLAGS) -c -o ppm.o ppm.c
+	$(CC) $(CFLAGS) -c -o ppm.o ppm.c
 	
 gl_mandelbrot.o: gl_mandelbrot.c
-	clang $(CFLAGS) -c -o gl_mandelbrot.o gl_mandelbrot.c
+	$(CC) $(CFLAGS) -c -o gl_mandelbrot.o gl_mandelbrot.c
 
 dist:
 	zip $(ARCHIVE) $(FILES)
