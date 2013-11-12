@@ -1,0 +1,3 @@
+
+
+1. The black pixels takes longer to compute due to reaching max iterations. If one chunk has lots of pixels reaching max iterations makes it slower than others.
