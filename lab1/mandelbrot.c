@@ -14,11 +14,11 @@
 #define NDEBUG
 #endif
 
-#if NB_THREADS > 0
+//#if NB_THREADS > 0
 #include "pthread_barrier_apple.h"
 #include <pthread.h>
 #include <unistd.h>
-#endif
+//#endif
 
 #ifdef __MACH__
 //clock_gettime is not implemented on OSX
@@ -144,18 +144,17 @@ init_round(struct mandelbrot_thread *args)
 void
 parallel_mandelbrot(struct mandelbrot_thread *args, struct mandelbrot_param *parameters)
 {
+	int id = args->id;
 #if LOADBALANCE == 0
 
-	int id = args->id;
 	// naive *parallel* implementation. Compiled only if LOADBALANCE = 0
 
 	// Define the region compute_chunk() has to compute
-	// Entire height: from 0 to picture's height
-	if(id == 3)
-		id--;
+	// Region of height
 
-	parameters->begin_h = id/NB_THREADS * parameters->height;
-	parameters->end_h = ((id+1)/NB_THREADS )* parameters->height;
+	parameters->begin_h = id/(float)NB_THREADS * parameters->height;
+	parameters->end_h = (id+1)/(float)NB_THREADS * parameters->height;
+
 	// Entire width: from 0 to picture's width
 	parameters->begin_w = 0;
 	parameters->end_w = parameters->width;
@@ -165,6 +164,24 @@ parallel_mandelbrot(struct mandelbrot_thread *args, struct mandelbrot_param *par
 #endif
 #if LOADBALANCE == 1
 	// Your load-balanced smarter solution. Compiled only if LOADBALANCE = 1
+
+	const int num_x_blocks = 10;
+	const int num_y_blocks = 10;
+	const int total = num_x_blocks * num_y_blocks;
+	const int step = NB_THREADS;
+
+	for(int i=id; i<total; i+=step) {
+		int y = i / num_x_blocks;
+		int x = i % num_x_blocks;
+
+		parameters->begin_h = y/(float)num_y_blocks * parameters->height;
+		parameters->end_h = (y+1)/(float)num_y_blocks * parameters->height;
+		parameters->begin_w = x/(float)num_x_blocks * parameters->width;
+		parameters->end_w = (x+1)/(float)num_x_blocks * parameters->width;
+
+		// Go
+		compute_chunk(parameters);
+	}
 #endif
 #if LOADBALANCE == 2
 	// A second *optional* load-balancing solution. Compiled only if LOADBALANCE = 2
