@@ -151,8 +151,6 @@ parallel_mandelbrot(struct mandelbrot_thread *args, struct mandelbrot_param *par
 
 	// Define the region compute_chunk() has to compute
 	// Entire height: from 0 to picture's height
-	if(id == 3)
-		id--;
 
 	parameters->begin_h = id/NB_THREADS * parameters->height;
 	parameters->end_h = ((id+1)/NB_THREADS )* parameters->height;
