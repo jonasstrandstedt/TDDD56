@@ -26,6 +26,20 @@
 #ifndef MANDELBROT_H_
 #define MANDELBROT_H_
 
+#ifdef MEASURE
+
+#ifdef __MACH__
+#include <sys/time.h>
+#define GETTIME(x) clock_gettime_mac(0, x)
+int clock_gettime_mac(int clk_id, struct timespec* t);
+#else
+#define GETTIME(x) clock_gettime(CLOCK_MONOTONIC, x)
+#include <time.h>
+#endif
+// If we measure, we don't debug as assert() and printf() seriously affect performance
+#undef DEBUG
+#endif
+
 struct mandelbrot_param
 {
   int height, width, maxiter;
