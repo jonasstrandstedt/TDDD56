@@ -15,7 +15,9 @@
 #endif
 
 #if NB_THREADS > 0
+#include "pthread_barrier_apple.h"
 #include <pthread.h>
+#include <unistd.h>
 #endif
 
 #ifdef __MACH__
@@ -143,7 +145,23 @@ void
 parallel_mandelbrot(struct mandelbrot_thread *args, struct mandelbrot_param *parameters)
 {
 #if LOADBALANCE == 0
+
+	int id = args->id;
 	// naive *parallel* implementation. Compiled only if LOADBALANCE = 0
+
+	// Define the region compute_chunk() has to compute
+	// Entire height: from 0 to picture's height
+	if(id == 3)
+		id--;
+
+	parameters->begin_h = id/NB_THREADS * parameters->height;
+	parameters->end_h = ((id+1)/NB_THREADS )* parameters->height;
+	// Entire width: from 0 to picture's width
+	parameters->begin_w = 0;
+	parameters->end_w = parameters->width;
+
+	// Go
+	compute_chunk(parameters);
 #endif
 #if LOADBALANCE == 1
 	// Your load-balanced smarter solution. Compiled only if LOADBALANCE = 1

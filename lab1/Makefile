@@ -20,7 +20,7 @@ LOWER_R=-2
 UPPER_R=0.6
 LOWER_I=-1
 UPPER_I=1
-NB_THREADS=0
+NB_THREADS=4
 LOADBALANCE=0
 MANDELBROT_COLOR=0
 GLUT=0
@@ -36,7 +36,7 @@ ifeq ($(OS),Linux)
 	LDFLAGS=-lrt -lglut -lGL -lGLU -lGLEW -lX11 -lm
 else ifeq ($(OS),Darwin)
 	# mac link flags and microglut version
-	LDFLAGS=-framework GLUT -framework Cocoa -framework OpenGL -lm
+	LDFLAGS=-framework GLUT -framework Cocoa -framework OpenGL -lm -lpthread
 else ifeq ($(OS),MinGW)
 endif
 
