@@ -1,0 +1,5 @@
+.DS_Store
+lab1/mandelbrot-*
+lab1/mandelbrot.ppm
+lab1/mandelbrot.png
+*.o
