@@ -170,7 +170,8 @@ parallel_mandelbrot(struct mandelbrot_thread *args, struct mandelbrot_param *par
 	const int total = num_x_blocks * num_y_blocks;
 	const int step = NB_THREADS;
 
-	for(int i=id; i<total; i+=step) {
+	int i;
+	for(i=id; i<total; i+=step) {
 		int y = i / num_x_blocks;
 		int x = i % num_x_blocks;
 
