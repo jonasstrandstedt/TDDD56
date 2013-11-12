@@ -61,6 +61,11 @@ struct mandelbrot_timing **timing;
 
 struct mandelbrot_param mandelbrot_param;
 
+#if LOADBALANCE == 2
+	pthread_mutex_t atomic_mutex;
+	int atomic_counter;
+#endif
+
 static int num_colors(struct mandelbrot_param* param)
 {
 	return param->maxiter + 1;
@@ -136,6 +141,9 @@ void
 init_round(struct mandelbrot_thread *args)
 {
 	// Initialize or reinitialize here variables before any thread starts or restarts computation
+	#if LOADBALANCE == 2
+	atomic_counter = 0;
+	#endif
 }
 
 /*
@@ -186,6 +194,33 @@ parallel_mandelbrot(struct mandelbrot_thread *args, struct mandelbrot_param *par
 #endif
 #if LOADBALANCE == 2
 	// A second *optional* load-balancing solution. Compiled only if LOADBALANCE = 2
+	const int num_x_blocks = 10;
+	const int num_y_blocks = 10;
+	const int total = num_x_blocks * num_y_blocks;
+
+
+	int myblock;
+	while(atomic_counter < total) {
+
+
+    	pthread_mutex_lock(&atomic_mutex);
+    	myblock = atomic_counter++;
+    	pthread_mutex_unlock(&atomic_mutex);
+
+    	if (myblock >= total)
+    		break;
+    	
+		int y = myblock / num_x_blocks;
+		int x = myblock % num_x_blocks;
+
+		parameters->begin_h = y/(float)num_y_blocks * parameters->height;
+		parameters->end_h = (y+1)/(float)num_y_blocks * parameters->height;
+		parameters->begin_w = x/(float)num_x_blocks * parameters->width;
+		parameters->end_w = (x+1)/(float)num_x_blocks * parameters->width;
+
+		// Go
+		compute_chunk(parameters);
+	}
 #endif
 }
 /***** end *****/
@@ -314,6 +349,11 @@ init_mandelbrot(struct mandelbrot_param *param)
 	param->picture->height = param->height;
 	param->picture->width = param->width;
 
+#if LOADBALANCE == 2
+	pthread_mutex_init(&atomic_mutex, 0);
+	atomic_counter = 0;
+#endif
+
 #if GLUT != 1
 	// GLUT will do it when creating or resizing its window
 	init_ppm(param);
@@ -405,6 +445,11 @@ compute_mandelbrot(struct mandelbrot_param param)
 void
 destroy_mandelbrot(struct mandelbrot_param param)
 {
+
+#if LOADBALANCE == 2
+	pthread_mutex_destroy(&atomic_mutex);
+#endif
+
 #if NB_THREADS > 0
 	int i;
 
