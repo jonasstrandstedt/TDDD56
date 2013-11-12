@@ -9,12 +9,6 @@
 #include "mandelbrot.h"
 #include "ppm.h"
 
-#ifdef MEASURE
-#include <time.h>
-// If we measure, we don't debug as assert() and printf() seriously affect performance
-#undef DEBUG
-#endif
-
 // Disable assertion code if DEBUG is not defined
 #ifndef DEBUG
 #define NDEBUG
@@ -22,6 +16,18 @@
 
 #if NB_THREADS > 0
 #include <pthread.h>
+#endif
+
+#ifdef __MACH__
+//clock_gettime is not implemented on OSX
+int clock_gettime_mac(int clk_id, struct timespec* t) {
+    struct timeval now;
+    int rv = gettimeofday(&now, NULL);
+    if (rv) return rv;
+    t->tv_sec  = now.tv_sec;
+    t->tv_nsec = now.tv_usec * 1000;
+    return 0;
+}
 #endif
 
 color_t *color = NULL;
@@ -188,13 +194,13 @@ run_thread(void * buffer)
 	while (thread_stop == 0)
 	{
 #ifdef MEASURE
-		clock_gettime(CLOCK_MONOTONIC, &args->timing.start);
+		GETTIME(&args->timing.start);
 #endif
 
 		parallel_mandelbrot(args, &param);
 
 #ifdef MEASURE
-		clock_gettime(CLOCK_MONOTONIC, &args->timing.stop);
+		GETTIME(&args->timing.stop);
 #endif
 
 		// Notify the master thread of completion
@@ -345,13 +351,13 @@ compute_mandelbrot(struct mandelbrot_param param)
 	pthread_barrier_wait(&thread_pool_barrier);
 #else
 #ifdef MEASURE
-	clock_gettime(CLOCK_MONOTONIC, &sequential.start);
+	GETTIME(&sequential.start);
 #endif
 
 	sequential_mandelbrot(&param);
 
 #ifdef MEASURE
-	clock_gettime(CLOCK_MONOTONIC, &sequential.stop);
+	GETTIME(&sequential.stop);
 #endif
 #endif
 

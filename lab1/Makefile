@@ -23,7 +23,7 @@ UPPER_I=1
 NB_THREADS=0
 LOADBALANCE=0
 MANDELBROT_COLOR=0
-GLUT=1
+GLUT=0
 
 MEASURE_FLAG=$(if $(MEASURE),-DMEASURE,)
 DEBUG_FLAG=$(if $(DEBUG),-DDEBUG,)
@@ -36,7 +36,7 @@ ifeq ($(OS),Linux)
 	LDFLAGS=-lrt -lglut -lGL -lGLU -lGLEW -lX11 -lm
 else ifeq ($(OS),Darwin)
 	# mac link flags and microglut version
-	LDFLAGS=-framework GLUT -framework Cocoa -framework OpenGL -lm 
+	LDFLAGS=-framework GLUT -framework Cocoa -framework OpenGL -lm
 else ifeq ($(OS),MinGW)
 endif
 
@@ -44,7 +44,7 @@ endif
 all: mandelbrot-$(MAXITER)-$(WIDTH)-$(HEIGHT)-$(LOWER_R)-$(UPPER_R)-$(LOWER_I)-$(UPPER_I)-$(NB_THREADS)-$(LOADBALANCE)
 
 clean:
-	$(RM) mandelbrot-*
+	$(RM) -r mandelbrot-*
 	$(RM) mandelbrot
 	$(RM) *.o
 

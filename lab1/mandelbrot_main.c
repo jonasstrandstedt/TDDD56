@@ -66,11 +66,11 @@ main(int argc, char ** argv)
 
 #ifdef MEASURE
   struct mandelbrot_timing ** thread, global;
-  clock_gettime(CLOCK_MONOTONIC, &global.start);
+  GETTIME(&global.start);
 
   thread = compute_mandelbrot(param);
 
-  clock_gettime(CLOCK_MONOTONIC, &global.stop);
+  GETTIME(&global.stop);
 #elif GLUT == 1
   srand(time(NULL));
   gl_mandelbrot_init(argc, argv);
