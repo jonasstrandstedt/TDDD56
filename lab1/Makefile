@@ -34,7 +34,7 @@ CFLAGS= -g -O0 -Wall -DMAXITER=$(MAXITER) -DWIDTH=$(WIDTH) -DHEIGHT=$(HEIGHT) -D
 #CFLAGS= -O3 -msse2 -mfpmath=sse -ftree-vectorize -funroll-loops  -Wall -DMAXITER=$(MAXITER) -DWIDTH=$(WIDTH) -DHEIGHT=$(HEIGHT) -DLOWER_R=$(LOWER_R) -DUPPER_R=$(UPPER_R) -DLOWER_I=$(LOWER_I) -DUPPER_I=$(UPPER_I) -DNB_THREADS=$(NB_THREADS) -DLOADBALANCE=$(LOADBALANCE) $(MEASURE_FLAG) $(DEBUG_FLAG) -DMANDELBROT_COLOR=$(MANDELBROT_COLOR) -DGLUT=$(GLUT)
 ifeq ($(OS),Linux)
 	# linux link flags and microglut version
-	LDFLAGS=-lrt -lglut -lGL -lGLU -lGLEW -lX11 -lm
+	LDFLAGS=-lrt -lglut -lGL -lGLU -lX11 -lm
 else ifeq ($(OS),Darwin)
 	CC=clang
 	# mac link flags and microglut version
