@@ -52,13 +52,15 @@ typedef int data_t;
 #define DATA_SIZE sizeof(data_t)
 #define DATA_VALUE 5
 
-macstack_t *stack;
+stack_t *stack;
 data_t data;
 
 void
 test_init()
 {
   // Initialize your test batch
+  stack = stack_alloc();
+  stack_init(stack, 1000);
 }
 
 void
@@ -79,6 +81,36 @@ void
 test_finalize()
 {
   // Destroy properly your test batch
+  stack_deinit(stack);
+}
+
+void*
+thread_test_push_safe(void* arg)
+{
+
+  int int_num = 1000;
+  int *num = (int*)malloc(sizeof(int)*int_num);
+  int i;
+  for(i = 0; i < int_num; ++i) {
+    num[i] = 1;
+    stack_push_safe(stack, (void*)(num + i));
+  }
+
+  return NULL;
+}
+
+void*
+thread_test_pop_safe(void* arg)
+{
+
+  int int_num = 1000;
+  int num;
+  int i;
+  for(i = 0; i < int_num; ++i) {
+    stack_pop_safe(stack, &num);
+  }
+
+  return NULL;
 }
 
 int
@@ -86,6 +118,35 @@ test_push_safe()
 {
   // Make sure your stack remains in a good state with expected content when
   // several threads push concurrently to it
+  test_setup();
+  pthread_attr_t attr;
+  pthread_t thread[NB_THREADS];
+  
+  pthread_attr_init(&attr);
+  pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE); 
+
+  size_t i;
+  for (i = 0; i < NB_THREADS; i++)
+  {
+    pthread_create(&thread[i], &attr, &thread_test_push_safe, (void*) NULL);
+  }
+
+  for (i = 0; i < NB_THREADS; i++)
+    {
+      pthread_join(thread[i], NULL);
+    }
+
+  node_t * n = stack->head;
+  size_t count = 0;
+  while(n)
+  {
+    ++count;
+    n = n->next;
+  }
+
+  printf("tja %ti \n", count);
+
+  test_teardown();
 
   return 0;
 }
@@ -94,6 +155,35 @@ int
 test_pop_safe()
 {
   // Same as the test above for parallel pop operation
+  test_setup();
+  pthread_attr_t attr;
+  pthread_t thread[NB_THREADS];
+  
+  pthread_attr_init(&attr);
+  pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE); 
+
+  size_t i;
+  for (i = 0; i < NB_THREADS; i++)
+  {
+    pthread_create(&thread[i], &attr, &thread_test_pop_safe, (void*) NULL);
+  }
+
+  for (i = 0; i < NB_THREADS; i++)
+    {
+      pthread_join(thread[i], NULL);
+    }
+
+  node_t * n = stack->head;
+  size_t count = 0;
+  while(n)
+  {
+    ++count;
+    n = n->next;
+  }
+
+  printf("tja %ti \n", count);
+
+  test_teardown();
 
   return 0;
 }

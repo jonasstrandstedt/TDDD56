@@ -27,17 +27,35 @@
 #ifndef STACK_H
 #define STACK_H
 
-struct macstack
+struct node
 {
-  // This is a fake structure; change it to your needs
-  int change_this_member;
+	struct node * next;
+	void * data;
 };
 
-typedef struct macstack macstack_t;
+typedef struct node node_t;
+
+struct stack
+{
+  // This is a fake structure; change it to your needs
+  //int change_this_member;
+	node_t * head;
+	node_t * freehead;
+
+#if NON_BLOCKING == 0
+	pthread_mutex_t stack_lock;
+#endif
+};
+
+typedef struct stack stack_t;
 
 // Pushes an element in a thread-safe manner
-int stack_push_safe(macstack_t *, void*);
+int stack_push_safe(stack_t *, void*);
 // Pops an element in a thread-safe manner
-int stack_pop_safe(macstack_t *, void*);
+int stack_pop_safe(stack_t *, void*);
+
+stack_t * stack_alloc();
+int stack_init(stack_t *stack, size_t size);
+int stack_deinit(stack_t *stack);
 
 #endif /* STACK_H */

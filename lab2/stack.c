@@ -45,14 +45,14 @@
 #endif
 #endif
 
-macstack_t *
+stack_t *
 stack_alloc()
 {
   // Example of a task allocation with correctness control
   // Feel free to change it
-  macstack_t *res;
+  stack_t *res;
 
-  res = malloc(sizeof(macstack_t));
+  res = malloc(sizeof(stack_t));
   assert(res != NULL);
 
   if (res == NULL)
@@ -62,6 +62,7 @@ stack_alloc()
 // different manners if you need so
 #if NON_BLOCKING == 0
   // Implement a lock_based stack
+  pthread_mutex_init(&res->stack_lock,0);
 #elif NON_BLOCKING == 1
   /*** Optional ***/
   // Implement a harware CAS-based stack
@@ -73,10 +74,21 @@ stack_alloc()
 }
 
 int
-stack_init(macstack_t *stack, size_t size)
+stack_init(stack_t *stack, size_t size)
 {
   assert(stack != NULL);
   assert(size > 0);
+
+  stack->head = NULL;
+  stack->freehead = NULL;
+
+  size_t i;
+  for(i=0; i<size; ++i)
+  {
+    node_t *n = (node_t*)malloc(sizeof(node_t));
+    n->next = stack->freehead;
+    stack->freehead = n;
+  }
 
 #if NON_BLOCKING == 0
   // Implement a lock_based stack
@@ -91,7 +103,22 @@ stack_init(macstack_t *stack, size_t size)
 }
 
 int
-stack_check(macstack_t *stack)
+stack_deinit(stack_t *stack) {
+  while(stack->head != NULL) {
+    node_t *n = stack->head;
+    stack->head = stack->head->next;
+    free(n);
+  }
+  while(stack->freehead != NULL) {
+    node_t *n = stack->freehead;
+    stack->freehead = stack->freehead->next;
+    free(n);
+  }
+  return 0;
+}
+
+int
+stack_check(stack_t *stack)
 {
   /*** Optional ***/
   // Use code and assertions to make sure your stack is
@@ -107,10 +134,25 @@ stack_check(macstack_t *stack)
 }
 
 int
-stack_push(macstack_t *stack, void* buffer)
+stack_push_safe(stack_t *stack, void* buffer)
 {
 #if NON_BLOCKING == 0
   // Implement a lock_based stack
+
+
+
+
+  pthread_mutex_lock(&stack->stack_lock);
+  node_t *n = stack->freehead;
+  if(n != NULL) {
+    stack->freehead = n->next;
+  } else {
+    n = (node_t*)malloc(sizeof(node_t));
+  }
+  n->data = buffer;
+  n->next = stack->head;
+  stack->head = n;
+  pthread_mutex_unlock(&stack->stack_lock);
 #elif NON_BLOCKING == 1
   /*** Optional ***/
   // Implement a harware CAS-based stack
@@ -122,10 +164,25 @@ stack_push(macstack_t *stack, void* buffer)
 }
 
 int
-stack_pop(macstack_t *stack, void* buffer)
+stack_pop_safe(stack_t *stack, void* buffer)
 {
 #if NON_BLOCKING == 0
   // Implement a lock_based stack
+
+  if(stack->head == NULL)
+    return -1;
+
+  pthread_mutex_lock(&stack->stack_lock);
+
+  buffer = stack->head->data;
+  node_t * n = stack->head;
+  stack->head = stack->head->next;
+
+  n->next = stack->freehead;
+  stack->freehead = n;
+
+  pthread_mutex_unlock(&stack->stack_lock);
+
 #elif NON_BLOCKING == 1
   /*** Optional ***/
   // Implement a harware CAS-based stack
