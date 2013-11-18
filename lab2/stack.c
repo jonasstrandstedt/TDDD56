@@ -45,14 +45,14 @@
 #endif
 #endif
 
-stack_t *
+macstack_t *
 stack_alloc()
 {
   // Example of a task allocation with correctness control
   // Feel free to change it
-  stack_t *res;
+  macstack_t *res;
 
-  res = malloc(sizeof(stack_t));
+  res = malloc(sizeof(macstack_t));
   assert(res != NULL);
 
   if (res == NULL)
@@ -73,7 +73,7 @@ stack_alloc()
 }
 
 int
-stack_init(stack_t *stack, size_t size)
+stack_init(macstack_t *stack, size_t size)
 {
   assert(stack != NULL);
   assert(size > 0);
@@ -91,7 +91,7 @@ stack_init(stack_t *stack, size_t size)
 }
 
 int
-stack_check(stack_t *stack)
+stack_check(macstack_t *stack)
 {
   /*** Optional ***/
   // Use code and assertions to make sure your stack is
@@ -107,7 +107,7 @@ stack_check(stack_t *stack)
 }
 
 int
-stack_push(stack_t *stack, void* buffer)
+stack_push(macstack_t *stack, void* buffer)
 {
 #if NON_BLOCKING == 0
   // Implement a lock_based stack
@@ -122,7 +122,7 @@ stack_push(stack_t *stack, void* buffer)
 }
 
 int
-stack_pop(stack_t *stack, void* buffer)
+stack_pop(macstack_t *stack, void* buffer)
 {
 #if NON_BLOCKING == 0
   // Implement a lock_based stack

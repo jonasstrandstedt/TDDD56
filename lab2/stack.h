@@ -27,17 +27,17 @@
 #ifndef STACK_H
 #define STACK_H
 
-struct stack
+struct macstack
 {
   // This is a fake structure; change it to your needs
   int change_this_member;
 };
 
-typedef struct stack stack_t;
+typedef struct macstack macstack_t;
 
 // Pushes an element in a thread-safe manner
-int stack_push_safe(stack_t *, void*);
+int stack_push_safe(macstack_t *, void*);
 // Pops an element in a thread-safe manner
-int stack_pop_safe(stack_t *, void*);
+int stack_pop_safe(macstack_t *, void*);
 
 #endif /* STACK_H */
