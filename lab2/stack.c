@@ -80,14 +80,14 @@ stack_init(stack_t *stack, size_t size)
   assert(size > 0);
 
   stack->head = NULL;
-  stack->freehead = NULL;
 
   size_t i;
   for(i=0; i<size; ++i)
   {
     node_t *n = (node_t*)malloc(sizeof(node_t));
-    n->next = stack->freehead;
-    stack->freehead = n;
+    n->next = stack->head;
+    n->data = i;
+    stack->head = n;
   }
 
 #if NON_BLOCKING == 0
@@ -107,11 +107,6 @@ stack_deinit(stack_t *stack) {
   while(stack->head != NULL) {
     node_t *n = stack->head;
     stack->head = stack->head->next;
-    free(n);
-  }
-  while(stack->freehead != NULL) {
-    node_t *n = stack->freehead;
-    stack->freehead = stack->freehead->next;
     free(n);
   }
   return 0;
@@ -134,28 +129,22 @@ stack_check(stack_t *stack)
 }
 
 int
-stack_push_safe(stack_t *stack, void* buffer)
+stack_push_safe(stack_t *stack, node_t* n)
 {
+  if(n == NULL)
+    return -1;
+
 #if NON_BLOCKING == 0
   // Implement a lock_based stack
 
-
-
-
   pthread_mutex_lock(&stack->stack_lock);
-  node_t *n = stack->freehead;
-  if(n != NULL) {
-    stack->freehead = n->next;
-  } else {
-    n = (node_t*)malloc(sizeof(node_t));
-  }
-  n->data = buffer;
   n->next = stack->head;
   stack->head = n;
   pthread_mutex_unlock(&stack->stack_lock);
+
 #elif NON_BLOCKING == 1
   /*** Optional ***/
-  // Implement a harware CAS-based stack
+  // Implement a software CAS-based stack
 #else
   // Implement a harware CAS-based stack
 #endif
@@ -164,32 +153,51 @@ stack_push_safe(stack_t *stack, void* buffer)
 }
 
 int
-stack_pop_safe(stack_t *stack, void* buffer)
+stack_pop_safe(stack_t *stack, node_t* n)
 {
-#if NON_BLOCKING == 0
-  // Implement a lock_based stack
-
   if(stack->head == NULL)
     return -1;
 
+#if NON_BLOCKING == 0
+  // Implement a lock_based stack
+
   pthread_mutex_lock(&stack->stack_lock);
 
-  buffer = stack->head->data;
-  node_t * n = stack->head;
+  n = stack->head;
   stack->head = stack->head->next;
-
-  n->next = stack->freehead;
-  stack->freehead = n;
 
   pthread_mutex_unlock(&stack->stack_lock);
 
 #elif NON_BLOCKING == 1
   /*** Optional ***/
-  // Implement a harware CAS-based stack
+  // Implement a software CAS-based stack
 #else
   // Implement a harware CAS-based stack
 #endif
 
   return 0;
 }
+
+#if NON_BLOCKING == 1
+int stack_push_lock(stack_t * stack, node_t * n, pthread_mutex_t * lock)
+{
+  node_t* old;
+  do {
+    old = stack->head;
+    n->next = old;
+  } while (software_cas((size_t*)stack->head, (size_t)old, (size_t)n, lock) != old);
+  return 0;
+}
+
+int stack_pop_lock(stack_t * stack, node_t * n, pthread_mutex_t * lock)
+{
+  node_t* old;
+  do {
+    old = stack->head;
+    node_t * new = old->next;
+  } while (software_cas((size_t*)stack->head, (size_t)old, (size_t)new, lock) != old);
+  n = old;
+  return 0;
+}
+#endif
 

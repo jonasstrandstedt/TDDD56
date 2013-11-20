@@ -30,7 +30,7 @@
 struct node
 {
 	struct node * next;
-	void * data;
+	int data;
 };
 
 typedef struct node node_t;
@@ -40,7 +40,6 @@ struct stack
   // This is a fake structure; change it to your needs
   //int change_this_member;
 	node_t * head;
-	node_t * freehead;
 
 #if NON_BLOCKING == 0
 	pthread_mutex_t stack_lock;
@@ -50,9 +49,13 @@ struct stack
 typedef struct stack stack_t;
 
 // Pushes an element in a thread-safe manner
-int stack_push_safe(stack_t *, void*);
+int stack_push_safe(stack_t *, node_t *);
 // Pops an element in a thread-safe manner
-int stack_pop_safe(stack_t *, void*);
+int stack_pop_safe(stack_t *, node_t *);
+
+// Used to invoke ABA problem with external locks
+int stack_push_lock(stack_t *, node_t *, pthread_mutex_t * lock);
+int stack_pop_lock(stack_t *, node_t *, pthread_mutex_t * lock);
 
 stack_t * stack_alloc();
 int stack_init(stack_t *stack, size_t size);

@@ -52,6 +52,9 @@ typedef int data_t;
 #define DATA_SIZE sizeof(data_t)
 #define DATA_VALUE 5
 
+pthread_mutex_t *aba_locks[4];
+node_t          aba_pool[3];
+
 stack_t *stack;
 data_t data;
 
@@ -93,7 +96,7 @@ thread_test_push_safe(void* arg)
   int i;
   for(i = 0; i < int_num; ++i) {
     num[i] = 1;
-    stack_push_safe(stack, (void*)(num + i));
+    //stack_push_safe(stack, (void*)(num + i));
   }
 
   return NULL;
@@ -107,7 +110,7 @@ thread_test_pop_safe(void* arg)
   int num;
   int i;
   for(i = 0; i < int_num; ++i) {
-    stack_pop_safe(stack, &num);
+    //stack_pop_safe(stack, &num);
   }
 
   return NULL;
@@ -191,11 +194,155 @@ test_pop_safe()
 // 3 Threads should be enough to raise and detect the ABA problem
 #define ABA_NB_THREADS 3
 
+struct thread_test_pop_args
+{
+  int id;
+};
+
+typedef struct thread_test_pop_args thread_test_pop_args_t;
+
+int thread_pop_aba(node_t * n, pthread_mutex_t * mylock, pthread_mutex_t * otherlock)
+{
+  node_t* old;
+  node_t* next;
+
+  int loop = 0;
+  do {
+    old = stack->head;
+    next = old->next;
+    //lock
+    
+    if(otherlock != NULL)
+      pthread_mutex_unlock(otherlock);
+
+    if(mylock != NULL)
+      pthread_mutex_lock(mylock);
+    loop = cas((size_t*)stack->head, (size_t)old, (size_t)next) != (size_t)old;
+    if(mylock != NULL)
+      pthread_mutex_unlock(mylock);
+    //unlock
+  } while (loop);
+  n = old;
+
+  return 0;
+}
+
+int thread_push_aba(node_t * n)
+{
+  node_t* old;
+  do {
+    old = stack->head;
+    n->next = old;
+  } while (cas((size_t*)stack->head, (size_t)old, (size_t)n) != (size_t)old);
+  return 0;
+}
+
+void*
+thread_aba_0(void* args)
+{
+  // pop A ... Stuck on CAS
+  printf("t0: POP A AND GETTING STUCK \n");
+  node_t *n;
+  thread_pop_aba(n, aba_locks[0],aba_locks[1]);
+
+  printf("t0: PUSHING A \n");
+  thread_push_aba(n);
+
+  return NULL;
+}
+
+void*
+thread_aba_1(void* args)
+{
+  // wait for t0 to TRY and pop A
+  pthread_mutex_lock(aba_locks[1]);
+  node_t *n;
+  printf("t1: POP A ... ");
+  thread_pop_aba(n, NULL, NULL);
+  printf("success! \n");
+  pthread_mutex_unlock(aba_locks[2]);
+  pthread_mutex_lock(aba_locks[3]);
+
+  printf("t1: PUSH A \n");
+  thread_push_aba(n);
+
+  pthread_mutex_unlock(aba_locks[0]);
+
+  // pop A, Success
+  // wait for t2 to pop B
+  // 
+
+  return NULL;
+}
+
+void*
+thread_aba_2(void* args)
+{
+  // wait for t0 to TRY and pop A
+  // wait for t1 to pop A
+  pthread_mutex_lock(aba_locks[2]);
+  node_t *n;
+  printf("t2: POP B \n");
+  thread_pop_aba(n, NULL, NULL);
+  pthread_mutex_unlock(aba_locks[3]);
+  // pop B, Success
+
+  return NULL;
+}
+
+
 int
 test_aba()
 {
   int success, aba_detected = 0;
   // Write here a test for the ABA problem
+
+  // push A,B,C
+  node_t * n;
+
+  printf("main: push ABC \n");
+  int i;
+  //for(i=0; i<3; ++i)
+    //thread_push_aba(n+i);
+
+
+  stack = stack_alloc();
+  stack_init(stack, 4);
+thread_pop_aba(n, NULL, NULL);
+
+  printf("main: create 4 locks \n");
+  for(i=0; i<4; ++i) {
+    aba_locks[i] = (pthread_mutex_t*) malloc(sizeof(pthread_mutex_t));
+    pthread_mutex_init(aba_locks[i], 0);
+    pthread_mutex_lock(aba_locks[i]);
+  }
+
+  pthread_attr_t attr;
+  pthread_attr_init(&attr);
+  pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE); 
+
+  pthread_t thread0;
+  pthread_t thread1;
+  pthread_t thread2;
+
+  printf("main: spawn \n");
+  pthread_create(&thread0, &attr, &thread_aba_0, NULL);
+  pthread_create(&thread1, &attr, &thread_aba_1, NULL);
+  pthread_create(&thread2, &attr, &thread_aba_2, NULL);
+
+  // wait a few millisec
+
+  // unlock 1
+  //pthread_mutex_unlock(aba_locks[1]);
+
+  printf("main: wait join \n");
+  pthread_join(thread0, NULL);
+  pthread_join(thread1, NULL);
+  pthread_join(thread2, NULL);
+  printf("main: join \n");
+
+  free(n);
+
   success = aba_detected;
   return success;
 }

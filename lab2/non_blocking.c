@@ -26,6 +26,7 @@
 #endif
 
 #include <stddef.h>
+ #include <stdio.h>
 
 #if NON_BLOCKING == 0 || NON_BLOCKING == 1
 #include <pthread.h>
@@ -71,6 +72,9 @@ cas(size_t* reg, size_t oldval, size_t newval)
 #if 0
   //return __sync_val_compare_and_swap(reg, oldval, newval);
 #else
+printf("(*reg): %ti\n",(*reg));
+printf("oldval: %ti\n",oldval);
+printf("newval: %ti\n",newval);
   asm volatile( "lock; cmpxchg %2, %1":
                 "=a"(oldval):
                 "m"(*reg), "r"(newval), "a"(oldval):
