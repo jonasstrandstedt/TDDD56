@@ -33,10 +33,72 @@
 #include "sort.h"
 #include "simple_quicksort.h"
 
+inline void swap(int & a, int & b)
+{
+	int tmp = a;
+	a = b;
+	b = tmp;
+}
+
+void insertionSort(int * arr, int left, int right)
+{
+	int j;
+	for (int i = left + 1; i <= right; ++i)
+	{
+		int tmp = arr[i];
+		for (j = i; j > 0 && tmp < arr[j - 1]; --j)
+			arr[j] = arr[j - 1];
+		arr[j] = tmp;
+	}
+}
+
+inline int selectPivot(int * arr, int left, int right)
+{
+	int center = (left + right) / 2;
+	if (arr[center] < arr[left])
+		swap(arr[left], arr[center]);
+	if (arr[right] < arr[left])
+		swap(arr[left], arr[right]);
+	if (arr[right] < arr[center])
+		swap(arr[center], arr[right]);
+
+	swap(arr[center], arr[right - 1]);
+	return arr[right - 1];
+}
+
+void quicksort(int * arr, int left, int right)
+{
+	if (right - left <= 10)
+	{
+		insertionSort(arr, left, right);
+		return;
+	}
+
+	int pivot = selectPivot(arr, left, right);
+	int l = left;
+	int u = right - 1;
+
+	while (1)
+	{
+		while (arr[++l] < pivot);
+		while (arr[--u] > pivot);
+
+		if (l < u)
+			swap(arr[l], arr[u]);
+		else
+			break;
+	}
+
+	swap(arr[l], arr[right - 1]);
+
+	quicksort(arr, left, l - 1);
+	quicksort(arr, l + 1, right);
+}
+
 int
 sort(struct array * array)
 {
-	simple_quicksort_ascending(array);
+	quicksort(array, 0, array->size - 1);
 
 	return 0;
 }
