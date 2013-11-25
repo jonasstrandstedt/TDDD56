@@ -42,8 +42,8 @@ inline void swap(int & a, int & b)
 
 void insertionSort(int * arr, int left, int right)
 {
-	int j;
-	for (int i = left + 1; i <= right; ++i)
+	int i, j;
+	for (i = left + 1; i <= right; ++i)
 	{
 		int tmp = arr[i];
 		for (j = i; j > 0 && tmp < arr[j - 1]; --j)
