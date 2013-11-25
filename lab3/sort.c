@@ -98,7 +98,7 @@ void quicksort(int * arr, int left, int right)
 int
 sort(struct array * array)
 {
-	quicksort(array, 0, array->size - 1);
+	quicksort(array->data, 0, array->length - 1);
 
 	return 0;
 }
