@@ -33,12 +33,13 @@
 #include "sort.h"
 #include "simple_quicksort.h"
 
-inline void swap(int & a, int & b)
+/*inline void swap(int & a, int & b)
 {
 	int tmp = a;
 	a = b;
 	b = tmp;
 }
+*/
 
 void insertionSort(int * arr, int left, int right)
 {
