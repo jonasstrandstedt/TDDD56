@@ -33,13 +33,12 @@
 #include "sort.h"
 #include "simple_quicksort.h"
 
-/*inline void swap(int & a, int & b)
+inline void swap(int *a, int *b)
 {
-	int tmp = a;
-	a = b;
-	b = tmp;
+	int tmp = *a;
+	*a = *b;
+	*b = tmp;
 }
-*/
 
 void insertionSort(int * arr, int left, int right)
 {
@@ -57,13 +56,13 @@ inline int selectPivot(int * arr, int left, int right)
 {
 	int center = (left + right) / 2;
 	if (arr[center] < arr[left])
-		swap(arr[left], arr[center]);
+		swap(&arr[left], &arr[center]);
 	if (arr[right] < arr[left])
-		swap(arr[left], arr[right]);
+		swap(&arr[left], &arr[right]);
 	if (arr[right] < arr[center])
-		swap(arr[center], arr[right]);
+		swap(&arr[center], &arr[right]);
 
-	swap(arr[center], arr[right - 1]);
+	swap(&arr[center], &arr[right - 1]);
 	return arr[right - 1];
 }
 
@@ -85,12 +84,12 @@ void quicksort(int * arr, int left, int right)
 		while (arr[--u] > pivot);
 
 		if (l < u)
-			swap(arr[l], arr[u]);
+			swap(&arr[l], &arr[u]);
 		else
 			break;
 	}
 
-	swap(arr[l], arr[right - 1]);
+	swap(&arr[l], &arr[right - 1]);
 
 	quicksort(arr, left, l - 1);
 	quicksort(arr, l + 1, right);
