@@ -77,7 +77,6 @@ int
 stack_init(stack_t *stack, size_t size)
 {
   assert(stack != NULL);
-  assert(size > 0);
 
   stack->head = NULL;
 
@@ -129,7 +128,7 @@ stack_check(stack_t *stack)
 }
 
 int
-stack_push_safe(stack_t *stack, node_t* n)
+stack_push(stack_t *stack, node_t* n)
 {
   if(n == NULL)
     return -1;
@@ -147,13 +146,19 @@ stack_push_safe(stack_t *stack, node_t* n)
   // Implement a software CAS-based stack
 #else
   // Implement a harware CAS-based stack
+  node_t* old;
+  do {
+    old = stack->head;
+    n->next = old;
+  } while (cas((size_t*)&stack->head, (size_t)old, (size_t)n) != (size_t)old);
+  return 0;
 #endif
 
   return 0;
 }
 
 int
-stack_pop_safe(stack_t *stack, node_t* n)
+stack_pop(stack_t *stack, node_t** n)
 {
   if(stack->head == NULL)
     return -1;
@@ -173,31 +178,18 @@ stack_pop_safe(stack_t *stack, node_t* n)
   // Implement a software CAS-based stack
 #else
   // Implement a harware CAS-based stack
+  node_t* old;
+  node_t* next;
+
+  do {
+    old = stack->head;
+    next = old->next;
+  } while (cas((size_t*)&stack->head, (size_t)old, (size_t)next) != (size_t)old);
+  *n = old;
+
+  return 0;
 #endif
 
   return 0;
 }
-
-#if NON_BLOCKING == 1
-int stack_push_lock(stack_t * stack, node_t * n, pthread_mutex_t * lock)
-{
-  node_t* old;
-  do {
-    old = stack->head;
-    n->next = old;
-  } while (software_cas((size_t*)stack->head, (size_t)old, (size_t)n, lock) != old);
-  return 0;
-}
-
-int stack_pop_lock(stack_t * stack, node_t * n, pthread_mutex_t * lock)
-{
-  node_t* old;
-  do {
-    old = stack->head;
-    node_t * new = old->next;
-  } while (software_cas((size_t*)stack->head, (size_t)old, (size_t)new, lock) != old);
-  n = old;
-  return 0;
-}
-#endif
 

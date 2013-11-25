@@ -52,8 +52,14 @@ typedef int data_t;
 #define DATA_SIZE sizeof(data_t)
 #define DATA_VALUE 5
 
+struct stack_measure_arg
+{
+  int id;
+};
+typedef struct stack_measure_arg stack_measure_arg_t;
+
 pthread_mutex_t *aba_locks[4];
-node_t          aba_pool[3];
+node_t *pool[NB_THREADS];
 
 stack_t *stack;
 data_t data;
@@ -63,14 +69,27 @@ test_init()
 {
   // Initialize your test batch
   stack = stack_alloc();
-  stack_init(stack, 1000);
-}
+  stack_init(stack, 0);
+
+
 
 void
 test_setup()
 {
   // Allocate and initialize your test stack before each test
   data = DATA_VALUE;
+  size_t i,j;
+	for(i=0; i<NB_THREADS; ++i)
+		{
+		pool[i] = NULL;
+		for(j=0; j<MAX_PUSH_POP; ++j)
+		{
+		  node_t *n = (node_t*)malloc(sizeof(node_t));
+		  n->next = pool[i];
+		  n->data =j;
+		  pool[i] = n;
+		}
+	}
 }
 
 void
@@ -78,6 +97,16 @@ test_teardown()
 {
   // Do not forget to free your stacks after each test
   // to avoid memory leaks as now
+  size_t i,j;
+	for(i=0; i<NB_THREADS; ++i)
+		{
+		for(j=0; j<MAX_PUSH_POP; ++j)
+		{
+		  node_t *n = pool[i];
+		  pool[i] = n->next;
+		  free(n);
+		}
+	}
 }
 
 void
@@ -90,13 +119,13 @@ test_finalize()
 void*
 thread_test_push_safe(void* arg)
 {
-
-  int int_num = 1000;
-  int *num = (int*)malloc(sizeof(int)*int_num);
-  int i;
-  for(i = 0; i < int_num; ++i) {
-    num[i] = 1;
-    //stack_push_safe(stack, (void*)(num + i));
+	stack_measure_arg_t* args = (stack_measure_arg_t*) arg;
+	int id = args->id;
+	int i;
+  for(i = 0; i < MAX_PUSH_POP; ++i) {
+		node_t * n = pool[id];
+		pool[id] = n->next;
+    stack_push_safe(stack, n);
   }
 
   return NULL;
@@ -105,12 +134,14 @@ thread_test_push_safe(void* arg)
 void*
 thread_test_pop_safe(void* arg)
 {
-
-  int int_num = 1000;
-  int num;
+	stack_measure_arg_t* args = (stack_measure_arg_t*) arg;
+	int id = args->id;
   int i;
-  for(i = 0; i < int_num; ++i) {
-    //stack_pop_safe(stack, &num);
+  for(i = 0; i < MAX_PUSH_POP; ++i) {
+	  node_t * n;
+		stack_pop_safe(stack, &n);
+		n->next = pool[id];
+		pool[id] = n;
   }
 
   return NULL;
@@ -135,9 +166,9 @@ test_push_safe()
   }
 
   for (i = 0; i < NB_THREADS; i++)
-    {
-      pthread_join(thread[i], NULL);
-    }
+  {
+    pthread_join(thread[i], NULL);
+  }
 
   node_t * n = stack->head;
   size_t count = 0;
@@ -201,7 +232,7 @@ struct thread_test_pop_args
 
 typedef struct thread_test_pop_args thread_test_pop_args_t;
 
-int thread_pop_aba(node_t * n, pthread_mutex_t * mylock, pthread_mutex_t * otherlock)
+int thread_pop_aba(node_t **n, pthread_mutex_t * mylock, pthread_mutex_t * otherlock)
 {
   node_t* old;
   node_t* next;
@@ -217,12 +248,13 @@ int thread_pop_aba(node_t * n, pthread_mutex_t * mylock, pthread_mutex_t * other
 
     if(mylock != NULL)
       pthread_mutex_lock(mylock);
-    loop = cas((size_t*)stack->head, (size_t)old, (size_t)next) != (size_t)old;
+    loop = cas((size_t*)&stack->head, (size_t)old, (size_t)next) != (size_t)old;
     if(mylock != NULL)
       pthread_mutex_unlock(mylock);
     //unlock
   } while (loop);
-  n = old;
+  old->next = NULL;
+  *n = old;
 
   return 0;
 }
@@ -233,7 +265,7 @@ int thread_push_aba(node_t * n)
   do {
     old = stack->head;
     n->next = old;
-  } while (cas((size_t*)stack->head, (size_t)old, (size_t)n) != (size_t)old);
+  } while (cas((size_t*)&stack->head, (size_t)old, (size_t)n) != (size_t)old);
   return 0;
 }
 
@@ -241,10 +273,10 @@ void*
 thread_aba_0(void* args)
 {
   // pop A ... Stuck on CAS
-  printf("t0: POP A AND GETTING STUCK \n");
+  printf("t0: POP A... AND GETTING STUCK \n");
   node_t *n;
-  thread_pop_aba(n, aba_locks[0],aba_locks[1]);
-
+  thread_pop_aba(&n, aba_locks[0],aba_locks[1]);
+  printf("t0: FINNALY SUCCESS, POP A \n");
   printf("t0: PUSHING A \n");
   thread_push_aba(n);
 
@@ -256,15 +288,17 @@ thread_aba_1(void* args)
 {
   // wait for t0 to TRY and pop A
   pthread_mutex_lock(aba_locks[1]);
-  node_t *n;
-  printf("t1: POP A ... ");
-  thread_pop_aba(n, NULL, NULL);
+  node_t *n = NULL;
+  printf("t1: POP A... ");
+  thread_pop_aba(&n, NULL, NULL);
   printf("success! \n");
   pthread_mutex_unlock(aba_locks[2]);
   pthread_mutex_lock(aba_locks[3]);
 
-  printf("t1: PUSH A \n");
+  printf("t1: PUSH A... ");
+	if(n == NULL) printf("which is NULL... ");
   thread_push_aba(n);
+  printf("success! \n");
 
   pthread_mutex_unlock(aba_locks[0]);
 
@@ -282,8 +316,9 @@ thread_aba_2(void* args)
   // wait for t1 to pop A
   pthread_mutex_lock(aba_locks[2]);
   node_t *n;
-  printf("t2: POP B \n");
-  thread_pop_aba(n, NULL, NULL);
+  printf("t2: POP B... ");
+  thread_pop_aba(&n, NULL, NULL);
+  printf("success! \n");
   pthread_mutex_unlock(aba_locks[3]);
   // pop B, Success
 
@@ -298,7 +333,6 @@ test_aba()
   // Write here a test for the ABA problem
 
   // push A,B,C
-  node_t * n;
 
   printf("main: push ABC \n");
   int i;
@@ -307,8 +341,15 @@ test_aba()
 
 
   stack = stack_alloc();
-  stack_init(stack, 4);
-thread_pop_aba(n, NULL, NULL);
+  stack_init(stack, 3);
+
+printf("Stack data: ");
+node_t *tmp = stack->head;
+while(tmp != NULL) {
+	printf("%i ", tmp->data);
+	tmp = tmp->next;
+}
+printf("\n");
 
   printf("main: create 4 locks \n");
   for(i=0; i<4; ++i) {
@@ -341,7 +382,22 @@ thread_pop_aba(n, NULL, NULL);
   pthread_join(thread2, NULL);
   printf("main: join \n");
 
-  free(n);
+  int expected[2] = { 2, 0 };
+
+printf("Stack data: ");
+tmp = stack->head;
+i = 0;
+while(tmp != NULL) {
+	printf("%i ", tmp->data);
+	if(expected[i] != tmp->data)
+	{
+		printf("\nABA detected, value is %i, expected is %i \n", tmp->data, expected[i]);
+		aba_detected = 1;
+	}
+	tmp = tmp->next;
+	i++;
+}
+printf("\n");
 
   success = aba_detected;
   return success;
@@ -437,11 +493,6 @@ test_cas()
 
 // Stack performance test
 #if MEASURE != 0
-struct stack_measure_arg
-{
-  int id;
-};
-typedef struct stack_measure_arg stack_measure_arg_t;
 
 struct timespec t_start[NB_THREADS], t_stop[NB_THREADS], start, stop;
 #endif
@@ -468,6 +519,12 @@ setbuf(stdout, NULL);
 
   test_setup();
 
+  pthread_attr_t attr;
+  pthread_t thread[NB_THREADS];
+  
+  pthread_attr_init(&attr);
+  pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE); 
+
   clock_gettime(CLOCK_MONOTONIC, &start);
   for (i = 0; i < NB_THREADS; i++)
     {
@@ -477,14 +534,21 @@ setbuf(stdout, NULL);
 #if MEASURE == 1
       clock_gettime(CLOCK_MONOTONIC, &t_start[i]);
       // Push MAX_PUSH_POP times in parallel
+			pthread_create(&thread[i], &attr, &thread_test_push_safe, (void*) NULL);
       clock_gettime(CLOCK_MONOTONIC, &t_stop[i]);
 #else
       // Run pop-based performance test based on MEASURE token
       clock_gettime(CLOCK_MONOTONIC, &t_start[i]);
       // Pop MAX_PUSH_POP times in parallel
+			pthread_create(&thread[i], &attr, &thread_test_pop_safe, (void*) NULL);
       clock_gettime(CLOCK_MONOTONIC, &t_stop[i]);
 #endif
     }
+
+  for (i = 0; i < NB_THREADS; i++)
+  {
+    pthread_join(thread[i], NULL);
+  }
 
   // Wait for all threads to finish
   clock_gettime(CLOCK_MONOTONIC, &stop);
