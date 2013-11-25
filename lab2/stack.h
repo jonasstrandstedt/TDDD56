@@ -44,6 +44,9 @@ struct stack
 #if NON_BLOCKING == 0
 	pthread_mutex_t stack_lock;
 #endif
+#if NON_BLOCKING == 1
+	pthread_mutex_t stack_lock;
+#endif
 };
 
 typedef struct stack stack_t;

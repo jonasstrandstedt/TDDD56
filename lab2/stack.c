@@ -144,6 +144,11 @@ stack_push(stack_t *stack, node_t* n)
 #elif NON_BLOCKING == 1
   /*** Optional ***/
   // Implement a software CAS-based stack
+  node_t* old;
+  do {
+    old = stack->head;
+    n->next = old;
+  } while (software_cas((size_t*)&stack->head, (size_t)old, (size_t)n,&stack->stack_lock) != (size_t)old);
 #else
   // Implement a harware CAS-based stack
   node_t* old;
@@ -151,7 +156,6 @@ stack_push(stack_t *stack, node_t* n)
     old = stack->head;
     n->next = old;
   } while (cas((size_t*)&stack->head, (size_t)old, (size_t)n) != (size_t)old);
-  return 0;
 #endif
 
   return 0;
@@ -168,7 +172,7 @@ stack_pop(stack_t *stack, node_t** n)
 
   pthread_mutex_lock(&stack->stack_lock);
 
-  n = stack->head;
+  *n = stack->head;
   stack->head = stack->head->next;
 
   pthread_mutex_unlock(&stack->stack_lock);
@@ -176,6 +180,14 @@ stack_pop(stack_t *stack, node_t** n)
 #elif NON_BLOCKING == 1
   /*** Optional ***/
   // Implement a software CAS-based stack
+  node_t* old;
+  node_t* next;
+
+  do {
+    old = stack->head;
+    next = old->next;
+  } while (software_cas((size_t*)&stack->head, (size_t)old, (size_t)next,&stack->stack_lock) != (size_t)old);
+  *n = old;
 #else
   // Implement a harware CAS-based stack
   node_t* old;
@@ -187,7 +199,6 @@ stack_pop(stack_t *stack, node_t** n)
   } while (cas((size_t*)&stack->head, (size_t)old, (size_t)next) != (size_t)old);
   *n = old;
 
-  return 0;
 #endif
 
   return 0;

@@ -64,6 +64,10 @@ node_t *pool[NB_THREADS];
 stack_t *stack;
 data_t data;
 
+// functionsint
+int test_push_safe();
+int test_pop_safe();
+
 void
 test_init()
 {
@@ -71,13 +75,14 @@ test_init()
   stack = stack_alloc();
   stack_init(stack, 0);
 
-
+}
 
 void
 test_setup()
 {
   // Allocate and initialize your test stack before each test
   data = DATA_VALUE;
+
   size_t i,j;
 	for(i=0; i<NB_THREADS; ++i)
 		{
@@ -90,6 +95,12 @@ test_setup()
 		  pool[i] = n;
 		}
 	}
+
+#if MEASURE == 2
+
+test_push_safe();
+
+#endif
 }
 
 void
@@ -97,14 +108,13 @@ test_teardown()
 {
   // Do not forget to free your stacks after each test
   // to avoid memory leaks as now
-  size_t i,j;
-	for(i=0; i<NB_THREADS; ++i)
-		{
-		for(j=0; j<MAX_PUSH_POP; ++j)
-		{
-		  node_t *n = pool[i];
+  size_t i;
+	for(i=0; i<NB_THREADS; ++i) {  
+    node_t *n = pool[i];
+		while(n != NULL) {
 		  pool[i] = n->next;
 		  free(n);
+      n = pool[i];
 		}
 	}
 }
@@ -125,7 +135,7 @@ thread_test_push_safe(void* arg)
   for(i = 0; i < MAX_PUSH_POP; ++i) {
 		node_t * n = pool[id];
 		pool[id] = n->next;
-    stack_push_safe(stack, n);
+    stack_push(stack, n);
   }
 
   return NULL;
@@ -139,9 +149,14 @@ thread_test_pop_safe(void* arg)
   int i;
   for(i = 0; i < MAX_PUSH_POP; ++i) {
 	  node_t * n;
-		stack_pop_safe(stack, &n);
-		n->next = pool[id];
-		pool[id] = n;
+		stack_pop(stack, &n);
+    //if(n == NULL)
+     // printf("NULL(%i): %i\n", id, i);
+    //else {
+
+    n->next = pool[id];
+    pool[id] = n;
+   // }
   }
 
   return NULL;
@@ -151,8 +166,10 @@ int
 test_push_safe()
 {
   // Make sure your stack remains in a good state with expected content when
-  // several threads push concurrently to it
-  test_setup();
+  // several threads push concurrently to it  
+  stack_measure_arg_t arg[NB_THREADS];  
+
+      
   pthread_attr_t attr;
   pthread_t thread[NB_THREADS];
   
@@ -162,7 +179,8 @@ test_push_safe()
   size_t i;
   for (i = 0; i < NB_THREADS; i++)
   {
-    pthread_create(&thread[i], &attr, &thread_test_push_safe, (void*) NULL);
+    arg[i].id = i;
+    pthread_create(&thread[i], &attr, &thread_test_push_safe, (void*) &arg[i]);
   }
 
   for (i = 0; i < NB_THREADS; i++)
@@ -178,18 +196,17 @@ test_push_safe()
     n = n->next;
   }
 
-  printf("tja %ti \n", count);
+  //printf("tja %ti \n", count);
 
-  test_teardown();
 
-  return 0;
+  return count == NB_THREADS * MAX_PUSH_POP;
 }
 
 int
 test_pop_safe()
 {
   // Same as the test above for parallel pop operation
-  test_setup();
+  stack_measure_arg_t arg[NB_THREADS];  
   pthread_attr_t attr;
   pthread_t thread[NB_THREADS];
   
@@ -199,7 +216,8 @@ test_pop_safe()
   size_t i;
   for (i = 0; i < NB_THREADS; i++)
   {
-    pthread_create(&thread[i], &attr, &thread_test_pop_safe, (void*) NULL);
+    arg[i].id = i;
+    pthread_create(&thread[i], &attr, &thread_test_pop_safe, (void*) &arg[i]);
   }
 
   for (i = 0; i < NB_THREADS; i++)
@@ -215,11 +233,10 @@ test_pop_safe()
     n = n->next;
   }
 
-  printf("tja %ti \n", count);
+  //printf("tja %ti \n", count);
 
-  test_teardown();
 
-  return 0;
+  return count == 0;
 }
 
 // 3 Threads should be enough to raise and detect the ABA problem
@@ -502,22 +519,19 @@ main(int argc, char **argv)
 {
 setbuf(stdout, NULL);
 // MEASURE == 0 -> run unit tests
-#if MEASURE == 0
   test_init();
+#if MEASURE == 0
 
   test_run(test_cas);
-
   test_run(test_push_safe);
   test_run(test_pop_safe);
   test_run(test_aba);
 
-  test_finalize();
 #else
+  test_setup();
   // Run performance tests
   int i;
   stack_measure_arg_t arg[NB_THREADS];  
-
-  test_setup();
 
   pthread_attr_t attr;
   pthread_t thread[NB_THREADS];
@@ -529,18 +543,18 @@ setbuf(stdout, NULL);
   for (i = 0; i < NB_THREADS; i++)
     {
       arg[i].id = i;
-      (void)arg[i].id; // Makes the compiler to shut up about unused variable arg
+      //(void)arg[i].id; // Makes the compiler to shut up about unused variable arg
       // Run push-based performance test based on MEASURE token
 #if MEASURE == 1
       clock_gettime(CLOCK_MONOTONIC, &t_start[i]);
       // Push MAX_PUSH_POP times in parallel
-			pthread_create(&thread[i], &attr, &thread_test_push_safe, (void*) NULL);
+			pthread_create(&thread[i], &attr, &thread_test_push_safe, (void*) &arg[i]);
       clock_gettime(CLOCK_MONOTONIC, &t_stop[i]);
 #else
       // Run pop-based performance test based on MEASURE token
       clock_gettime(CLOCK_MONOTONIC, &t_start[i]);
       // Pop MAX_PUSH_POP times in parallel
-			pthread_create(&thread[i], &attr, &thread_test_pop_safe, (void*) NULL);
+			pthread_create(&thread[i], &attr, &thread_test_pop_safe, (void*) &arg[i]);
       clock_gettime(CLOCK_MONOTONIC, &t_stop[i]);
 #endif
     }
@@ -561,7 +575,10 @@ setbuf(stdout, NULL);
           (int) t_start[i].tv_sec, t_start[i].tv_nsec, (int) t_stop[i].tv_sec,
           t_stop[i].tv_nsec);
     }
+  test_teardown();
+
 #endif
+  test_finalize();
 
   return 0;
 }
