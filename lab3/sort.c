@@ -36,7 +36,7 @@
 #include "sort.h"
 #include "simple_quicksort.h"
 
- pthread_attr_t attr;
+pthread_attr_t attr;
 pthread_t thread[NB_THREADS];
 
 struct thread_sort_arg
