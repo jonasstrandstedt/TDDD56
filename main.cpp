@@ -46,10 +46,10 @@ inline void swap(int & a, int & b)
 void insertionSort(int * arr, int left, int right)
 {
 	int j;
-	for (int i = left + 1; i <= right; ++i)
+	for (int i = left + 1; i < right; ++i)
 	{
 		int tmp = arr[i];
-		for (j = i; j > 0 && tmp < arr[j - 1]; --j)
+		for (j = i; j > left && tmp < arr[j - 1]; --j)
 			arr[j] = arr[j - 1];
 		arr[j] = tmp;
 	}
@@ -69,17 +69,17 @@ inline int selectPivot(int * arr, int left, int right)
 	return arr[right - 1];
 }
 
-void quicksort(int * arr, int left, int right)
+void quicksort(int * arr, int begin, int end)
 {
-	if (right - left <= 48)
+	if (end - begin < 50)
 	{
-		insertionSort(arr, left, right);
+		insertionSort(arr, begin, end);
 		return;
 	}
 
-	int pivot = selectPivot(arr, left, right);
-	int l = left;
-	int u = right - 1;
+	int pivot = selectPivot(arr, begin, end-1);
+	int l = begin;
+	int u = end - 2;
 
 	while (1)
 	{
@@ -92,10 +92,10 @@ void quicksort(int * arr, int left, int right)
 			break;
 	}
 
-	swap(arr[l], arr[right - 1]);
+	swap(arr[l], arr[end - 1]);
 
-	quicksort(arr, left, l - 1);
-	quicksort(arr, l + 1, right);
+	quicksort(arr, begin, l);
+	quicksort(arr, l, end);
 }
 
 void merge(	int * arr, int * tmp,
@@ -113,12 +113,18 @@ void merge(	int * arr, int * tmp,
 		else
 			tmp[i++] = arr[r++];
 	}
-
+/*
 	while (l <= left_end)
 		tmp[i++] = arr[l++];
 
 	while (r <= right_end)
 		tmp[i++] = arr[r++];
+*/
+	if(l <= left_end) 
+		memcpy(tmp+i, arr+l, (left_end-l+2)*sizeof(int));
+	else if(r <= right_end) 
+		memcpy(tmp+i, arr+r, (right_end-r+2)*sizeof(int));
+
 }
 
 void mergesort_recursive(int * arr, int * tmp, int left, int right)
@@ -129,9 +135,9 @@ void mergesort_recursive(int * arr, int * tmp, int left, int right)
 		printf("%i ",arr[i]);
 	printf("\n");
 */
-	if (right - left < 1)
+	if (right - left < 1000)
 	{
-		//quicksort(arr, left, right);
+		quicksort(arr, left, right+1);
 		return;
 	}
 
@@ -166,7 +172,7 @@ void mergesort(int * arr, int size)
 
 int main()
 {
-	int size = 10000;
+	int size = 10000000;
 	int *data = (int*)malloc(size * sizeof(int));
 	int *ref  = (int*)malloc(size * sizeof(int));
 
@@ -183,7 +189,7 @@ int main()
 	#else
 	auto start = std::chrono::high_resolution_clock::now();
 	#endif
-	//quicksort(data, 0, size-1);
+	//quicksort(data, 0, size);
 	//std::sort(data, data+size);
 	mergesort(data, size);
 	#ifdef _WIN32
@@ -194,6 +200,16 @@ int main()
 
 	std::sort(ref, ref+size);
 
+/*
+	printf("OUR: ");
+	for(int i=0; i< size; ++i)
+		printf("%i ",data[i]);
+
+
+	printf("\nSTD: ");
+	for(int i=0; i< size; ++i)
+		printf("%i ",ref[i]);
+*/
 	printf("\n");
 
 	std::chrono::duration<double> dur = std::chrono::duration_cast<std::chrono::nanoseconds>(stop - start);
