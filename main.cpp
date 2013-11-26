@@ -36,6 +36,22 @@ HighResClock::time_point HighResClock::now()
 }
 #endif
 
+#include <pthread.h>
+#define NB_THREADS 4
+      
+pthread_attr_t attr;
+pthread_t thread[NB_THREADS];
+
+struct thread_sort_arg
+{
+	int *arr;
+	int begin;
+	int end;
+};
+typedef struct thread_sort_arg thread_sort_arg_t;
+
+thread_sort_arg_t arg[NB_THREADS]; 
+
 inline void swap(int & a, int & b)
 {
 	int tmp = a;
@@ -121,10 +137,18 @@ void merge(	int * arr, int * tmp,
 		tmp[i++] = arr[r++];
 */
 	if(l <= left_end) 
-		memcpy(tmp+i, arr+l, (left_end-l+2)*sizeof(int));
+		memcpy(tmp+i, arr+l, (left_end-l+1)*sizeof(int));
 	else if(r <= right_end) 
-		memcpy(tmp+i, arr+r, (right_end-r+2)*sizeof(int));
+		memcpy(tmp+i, arr+r, (right_end-r+1)*sizeof(int));
 
+}
+
+void*
+thread_sort(void* arg)
+{
+	thread_sort_arg_t *a = (thread_sort_arg_t *) arg;
+	quicksort(a->arr, a->begin, a->end);
+	return NULL;
 }
 
 void mergesort_recursive(int * arr, int * tmp, int left, int right)
@@ -135,9 +159,53 @@ void mergesort_recursive(int * arr, int * tmp, int left, int right)
 		printf("%i ",arr[i]);
 	printf("\n");
 */
-	if (right - left < 1000)
+	if (right - left < 250000)
 	{
-		quicksort(arr, left, right+1);
+		int size = right - left + 1;
+		int tsize = size / NB_THREADS;
+		//printf("'size' %i \n", size);
+		for (int i = 0; i < NB_THREADS; i++)
+		{
+			arg[i].arr = arr;
+			arg[i].begin = left+i*tsize;
+			arg[i].end = arg[i].begin + tsize;
+			if(i == NB_THREADS-1)
+				arg[i].end = right+1;
+			//printf("%i : %i -> %i\n", i, arg[i].begin, arg[i].end);
+			pthread_create(&thread[i], &attr, &thread_sort, (void*) &arg[i]);
+		}
+		for (int i = 0; i < NB_THREADS; i++)
+		{
+			pthread_join(thread[i], NULL);
+		}
+
+		int i = 1;
+		merge(arr, tmp, arg[i-1].begin, arg[i].begin-1, arg[i].begin, arg[i].end-1);
+		//memcpy(arr+arg[i-1].begin, tmp+arg[i-1].begin, (arg[i].end-arg[i-1].begin)*sizeof(int));
+
+		i = 3;
+		merge(arr, tmp, arg[i-1].begin, arg[i].begin-1, arg[i].begin, arg[i].end-1);
+		//memcpy(arr+arg[i-1].begin, tmp+arg[i-1].begin, (arg[i].end-arg[i-1].begin)*sizeof(int));
+
+		//memcpy(arr+left, tmp+left, (size)*sizeof(int));
+		merge(tmp,arr , arg[0].begin, arg[1].end-1, arg[2].begin, arg[3].end-1);
+		
+		//memcpy(arr+left, tmp+left, (size)*sizeof(int));
+/*
+		merge(arr, tmp, arg[0].begin, arg[1].begin-1, arg[1].begin, arg[1].end-1);
+		merge(arr, tmp, arg[2].begin, arg[3].begin-1, arg[3].begin, arg[3].end-1);
+
+		merge(tmp, arr, arg[0].begin, arg[1].end-1, arg[2].begin, arg[3].end-1);
+*/
+		//merge(tmp, arr, left, arg[2].begin-1, arg[2].begin, right);
+
+		/*for (int i = 1; i < NB_THREADS; i++)
+		{
+			merge(arr, tmp, left, arg[i].begin-1, arg[i].begin, arg[i].end-1);
+			memcpy(arr+left, tmp+left, (arg[i].end-left)*sizeof(int));
+		}*/
+		//memcpy(arr+left, tmp+left, (size)*sizeof(int));
+
 		return;
 	}
 
@@ -174,7 +242,11 @@ int main()
 {
 	int size = 10000000;
 	int *data = (int*)malloc(size * sizeof(int));
+
 	int *ref  = (int*)malloc(size * sizeof(int));
+
+	pthread_attr_init(&attr);
+	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE); 
 
 	for (int i = 0; i < size; ++i)
 	{
@@ -182,7 +254,7 @@ int main()
 		ref[i] = data[i];
 	}
 
-	printf("\n");
+	//printf("\n");
 
 	#ifdef _WIN32
 	HighResClock::time_point start = HighResClock::now();
@@ -198,7 +270,13 @@ int main()
 	auto stop = std::chrono::high_resolution_clock::now();
 	#endif
 
-	std::sort(ref, ref+size);
+
+	std::chrono::duration<double> dur = std::chrono::duration_cast<std::chrono::nanoseconds>(stop - start);
+	
+
+#ifndef NDEBUG
+	printf("time taken %f \n", dur.count() * 1.0e3);
+	printf("expected time %f \n", 10000000 / size * dur.count() * 1.0e3);
 
 /*
 	printf("OUR: ");
@@ -209,14 +287,10 @@ int main()
 	printf("\nSTD: ");
 	for(int i=0; i< size; ++i)
 		printf("%i ",ref[i]);
-*/
+
 	printf("\n");
-
-	std::chrono::duration<double> dur = std::chrono::duration_cast<std::chrono::nanoseconds>(stop - start);
-
-	printf("time taken %f \n", dur.count() * 1.0e3);
-	printf("expected time %f \n", 10000000 / size * dur.count() * 1.0e3);
-
+*/
+	std::sort(ref, ref+size);
 	for (int i = 0; i < size; ++i)
 	{
 		if (data[i] != ref[i])
@@ -225,8 +299,11 @@ int main()
 			break;
 		}
 	}
+#else
+	printf("%f ", dur.count() * 1.0e3);
+#endif
 
-	printf("\n");
+	//printf("\n");
 
 	free(data);
 	free(ref);
