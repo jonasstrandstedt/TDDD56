@@ -47,7 +47,19 @@ struct thread_sort_arg
 };
 typedef struct thread_sort_arg thread_sort_arg_t;
 
-thread_sort_arg_t arg[NB_THREADS]; 
+thread_sort_arg_t arg[NB_THREADS];
+
+#define MAX_WORKLOAD 300
+struct thread_sort_improved_arg
+{
+	int *arr;
+	int begin[MAX_WORKLOAD];
+	int end[MAX_WORKLOAD];
+	int workload;
+};
+typedef struct thread_sort_improved_arg thread_sort_improved_arg_t;
+
+thread_sort_improved_arg_t arg_improved[NB_THREADS]; 
 
 inline void swap(int *a, int *b)
 {
@@ -148,6 +160,19 @@ thread_sort(void* arg)
 	return NULL;
 }
 
+void*
+thread_mergesort(void* arg)
+{
+	thread_sort_improved_arg_t *a = (thread_sort_improved_arg_t *) arg;
+
+	int i;
+	for (i = 0; i < a->workload; ++i)
+	{
+		quicksort(a->arr, a->begin[i], a->end[i]);
+	}
+	return NULL;
+}
+
 void mergesort_recursive(int * arr, int * tmp, int left, int right)
 {
 	/*
@@ -227,6 +252,123 @@ void mergesort_recursive(int * arr, int * tmp, int left, int right)
 	*/
 }
 
+
+#define PARALLELL_MERGESORT_LIMIT 1000
+void parallel_mergesort_init(int * arr, int * tmp, int left, int right)
+{
+
+	if (right - left < PARALLELL_MERGESORT_LIMIT)
+	{
+		int size = right - left + 1;
+		int tsize = size / NB_THREADS;
+		//printf("'size' %i \n", size);
+		int i;
+		for (i = 0; i < NB_THREADS; i++)
+		{
+			int workload = arg_improved[i].workload++;
+			arg_improved[i].begin[workload] = left+i*tsize;
+			arg_improved[i].end[workload] = arg_improved[i].begin[workload] + tsize ;
+			if(i == NB_THREADS-1)
+				arg_improved[i].end[workload] = right+1;
+			//printf("%i : %i -> %i\n", i, arg[i].begin[workload], arg[i].end[workload]);
+		}
+
+		return;
+	}
+	int center = (left + right) / 2;
+	parallel_mergesort_init(arr, tmp, left, center);
+	parallel_mergesort_init(arr, tmp, center+1, right);
+}
+
+void parallel_mergesort_merge(int * arr, int * tmp, int left, int right)
+{
+
+	if (right - left < PARALLELL_MERGESORT_LIMIT)
+	{
+		int size = right - left + 1;
+		int workload = arg_improved[0].workload;
+		int i;
+		for (i = 0; i < NB_THREADS; i++)
+		{
+			arg_improved[i].workload++;
+		}
+
+		i = 1;
+		merge(arr, tmp, arg_improved[i-1].begin[workload], arg_improved[i].begin[workload]-1, 
+			arg_improved[i].begin[workload], arg_improved[i].end[workload]-1);
+		//memcpy(arr+arg[i-1].begin, tmp+arg[i-1].begin, (arg[i].end-arg[i-1].begin)*sizeof(int));
+
+		i = 3;
+		merge(arr, tmp, arg_improved[i-1].begin[workload], arg_improved[i].begin[workload]-1, 
+			arg_improved[i].begin[workload], arg_improved[i].end[workload]-1);
+		//memcpy(arr+arg[i-1].begin, tmp+arg[i-1].begin, (arg[i].end-arg[i-1].begin)*sizeof(int));
+
+		memcpy(arr+left, tmp+left, (size)*sizeof(int));
+		merge(arr, tmp, arg_improved[0].begin[workload], arg_improved[1].end[workload]-1, 
+			arg_improved[2].begin[workload], arg_improved[3].end[workload]-1);
+		
+		memcpy(arr+left, tmp+left, (size)*sizeof(int));
+/*
+		merge(arr, tmp, arg[0].begin, arg[1].begin-1, arg[1].begin, arg[1].end-1);
+		merge(arr, tmp, arg[2].begin, arg[3].begin-1, arg[3].begin, arg[3].end-1);
+
+		merge(tmp, arr, arg[0].begin, arg[1].end-1, arg[2].begin, arg[3].end-1);
+*/
+		//merge(tmp, arr, left, arg[2].begin-1, arg[2].begin, right);
+
+		/*for (int i = 1; i < NB_THREADS; i++)
+		{
+			merge(arr, tmp, left, arg[i].begin-1, arg[i].begin, arg[i].end-1);
+			memcpy(arr+left, tmp+left, (arg[i].end-left)*sizeof(int));
+		}*/
+		//memcpy(arr+left, tmp+left, (size)*sizeof(int));
+
+		return;
+	}
+
+	int center = (left + right) / 2;
+	parallel_mergesort_merge(arr, tmp, left, center);
+	parallel_mergesort_merge(arr, tmp, center+1, right);
+
+	merge(arr, tmp, left, center, center+1, right);
+
+	memcpy(arr+left, tmp+left, (right-left+1)*sizeof(int));
+}
+
+void mergesort_improved(int * arr, int size)
+{
+	int * tmp = (int*)malloc(size * sizeof(int));
+
+	// initializing
+	int i;
+	for (i = 0; i < NB_THREADS; i++)
+	{
+		arg_improved[i].arr = arr;
+		arg_improved[i].workload = 0;
+	}
+	parallel_mergesort_init(arr, tmp, 0, size - 1);	// initializing
+
+
+	// do the partial sorting
+	for (i = 0; i < NB_THREADS; i++)
+	{
+		pthread_create(&thread[i], &attr, &thread_sort, (void*) &arg_improved[i]);
+	}
+	for (i = 0; i < NB_THREADS; i++)
+	{
+		pthread_join(thread[i], NULL);
+	}
+	for (i = 0; i < NB_THREADS; i++)
+	{
+		arg_improved[i].workload = 0;
+	}
+	parallel_mergesort_merge(arr, tmp, 0, size - 1);	// initializing
+
+	//mergesort_recursive(arr, tmp, 0, size - 1);
+
+	free(tmp);
+}
+
 void mergesort(int * arr, int size)
 {
 	int * tmp = (int*)malloc(size * sizeof(int));
@@ -240,7 +382,8 @@ int
 sort(struct array * array)
 {
 	//simple_quicksort_ascending(array);
-	mergesort(array->data, array->length);
+	//mergesort(array->data, array->length);
+	//mergesort_improved(array->data, array->length);
 
 	return 0;
 }
