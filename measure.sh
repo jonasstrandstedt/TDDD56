@@ -1,6 +1,6 @@
 #!/bin/bash
 
-clang++ -O0 -DNDEBUG main.cpp -std=c++11
+clang++ -O0 -DNDEBUG main.cpp -std=c++11 -lpthread
 
 #blur
 CMD="./a.out"

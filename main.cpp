@@ -1,5 +1,6 @@
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 
 #include <chrono>
 #include <algorithm>
@@ -38,6 +39,7 @@ HighResClock::time_point HighResClock::now()
 
 #include <pthread.h>
 #define NB_THREADS 4
+#define MAX_WORKLOAD 200
       
 pthread_attr_t attr;
 pthread_t thread[NB_THREADS];
@@ -45,8 +47,9 @@ pthread_t thread[NB_THREADS];
 struct thread_sort_arg
 {
 	int *arr;
-	int begin;
-	int end;
+	int begin[MAX_WORKLOAD];
+	int end[MAX_WORKLOAD];
+	int workload;
 };
 typedef struct thread_sort_arg thread_sort_arg_t;
 
@@ -147,7 +150,11 @@ void*
 thread_sort(void* arg)
 {
 	thread_sort_arg_t *a = (thread_sort_arg_t *) arg;
-	quicksort(a->arr, a->begin, a->end);
+
+	for (int i = 0; i < a->workload; ++i)
+	{
+		quicksort(a->arr, a->begin[i], a->end[i]);
+	}
 	return NULL;
 }
 
@@ -159,6 +166,7 @@ void mergesort_recursive(int * arr, int * tmp, int left, int right)
 		printf("%i ",arr[i]);
 	printf("\n");
 */
+	/*
 	if (right - left < 250000)
 	{
 		int size = right - left + 1;
@@ -191,6 +199,98 @@ void mergesort_recursive(int * arr, int * tmp, int left, int right)
 		merge(tmp,arr , arg[0].begin, arg[1].end-1, arg[2].begin, arg[3].end-1);
 		
 		//memcpy(arr+left, tmp+left, (size)*sizeof(int));
+
+		merge(arr, tmp, arg[0].begin, arg[1].begin-1, arg[1].begin, arg[1].end-1);
+		merge(arr, tmp, arg[2].begin, arg[3].begin-1, arg[3].begin, arg[3].end-1);
+
+		merge(tmp, arr, arg[0].begin, arg[1].end-1, arg[2].begin, arg[3].end-1);
+
+		//merge(tmp, arr, left, arg[2].begin-1, arg[2].begin, right);
+
+		for (int i = 1; i < NB_THREADS; i++)
+		{
+			merge(arr, tmp, left, arg[i].begin-1, arg[i].begin, arg[i].end-1);
+			memcpy(arr+left, tmp+left, (arg[i].end-left)*sizeof(int));
+		}
+		//memcpy(arr+left, tmp+left, (size)*sizeof(int));
+
+		return;
+	}
+
+	int center = (left + right) / 2;
+	mergesort_recursive(arr, tmp, left, center);
+	mergesort_recursive(arr, tmp, center+1, right);
+
+	merge(arr, tmp, left, center, center+1, right);
+
+	memcpy(arr+left, tmp+left, (right-left+1)*sizeof(int));
+	*/
+/*
+	printf("T: ");
+	for(int i=left; i<=right; ++i)
+		printf("%i ",tmp[i]);
+	printf("\n");
+
+	printf("M: ");
+	for(int i=left; i<=right; ++i)
+		printf("%i ",arr[i]);
+	printf("\n");
+	*/
+}
+
+#define PARALLELL_MERGESORT_LIMIT 10000000
+void parallel_mergesort_init(int * arr, int * tmp, int left, int right)
+{
+
+	if (right - left < PARALLELL_MERGESORT_LIMIT)
+	{
+		int size = right - left + 1;
+		int tsize = size / NB_THREADS;
+		//printf("'size' %i \n", size);
+		for (int i = 0; i < NB_THREADS; i++)
+		{
+			int workload = arg[i].workload++;
+			arg[i].begin[workload] = left+i*tsize;
+			arg[i].end[workload] = arg[i].begin[workload] + tsize ;
+			if(i == NB_THREADS-1)
+				arg[i].end[workload] = right+1;
+			//printf("%i : %i -> %i\n", i, arg[i].begin[workload], arg[i].end[workload]);
+		}
+
+		return;
+	}
+	int center = (left + right) / 2;
+	parallel_mergesort_init(arr, tmp, left, center);
+	parallel_mergesort_init(arr, tmp, center+1, right);
+}
+
+void parallel_mergesort_merge(int * arr, int * tmp, int left, int right)
+{
+
+	if (right - left < PARALLELL_MERGESORT_LIMIT)
+	{
+		int size = right - left + 1;
+		int workload = arg[0].workload;
+		for (int i = 0; i < NB_THREADS; i++)
+		{
+			arg[i].workload++;
+		}
+
+		int i = 1;
+		merge(arr, tmp, arg[i-1].begin[workload], arg[i].begin[workload]-1, 
+			arg[i].begin[workload], arg[i].end[workload]-1);
+		//memcpy(arr+arg[i-1].begin, tmp+arg[i-1].begin, (arg[i].end-arg[i-1].begin)*sizeof(int));
+
+		i = 3;
+		merge(arr, tmp, arg[i-1].begin[workload], arg[i].begin[workload]-1, 
+			arg[i].begin[workload], arg[i].end[workload]-1);
+		//memcpy(arr+arg[i-1].begin, tmp+arg[i-1].begin, (arg[i].end-arg[i-1].begin)*sizeof(int));
+
+		memcpy(arr+left, tmp+left, (size)*sizeof(int));
+		merge(arr, tmp, arg[0].begin[workload], arg[1].end[workload]-1, 
+			arg[2].begin[workload], arg[3].end[workload]-1);
+		
+		memcpy(arr+left, tmp+left, (size)*sizeof(int));
 /*
 		merge(arr, tmp, arg[0].begin, arg[1].begin-1, arg[1].begin, arg[1].end-1);
 		merge(arr, tmp, arg[2].begin, arg[3].begin-1, arg[3].begin, arg[3].end-1);
@@ -210,30 +310,44 @@ void mergesort_recursive(int * arr, int * tmp, int left, int right)
 	}
 
 	int center = (left + right) / 2;
-	mergesort_recursive(arr, tmp, left, center);
-	mergesort_recursive(arr, tmp, center+1, right);
+	parallel_mergesort_merge(arr, tmp, left, center);
+	parallel_mergesort_merge(arr, tmp, center+1, right);
 
 	merge(arr, tmp, left, center, center+1, right);
 
 	memcpy(arr+left, tmp+left, (right-left+1)*sizeof(int));
-/*
-	printf("T: ");
-	for(int i=left; i<=right; ++i)
-		printf("%i ",tmp[i]);
-	printf("\n");
-
-	printf("M: ");
-	for(int i=left; i<=right; ++i)
-		printf("%i ",arr[i]);
-	printf("\n");
-	*/
 }
+
 
 void mergesort(int * arr, int size)
 {
 	int * tmp = (int*)malloc(size * sizeof(int));
 
-	mergesort_recursive(arr, tmp, 0, size - 1);
+	// initializing
+	for (int i = 0; i < NB_THREADS; i++)
+	{
+		arg[i].arr = arr;
+		arg[i].workload = 0;
+	}
+	parallel_mergesort_init(arr, tmp, 0, size - 1);	// initializing
+
+
+	// do the partial sorting
+	for (int i = 0; i < NB_THREADS; i++)
+	{
+		pthread_create(&thread[i], &attr, &thread_sort, (void*) &arg[i]);
+	}
+	for (int i = 0; i < NB_THREADS; i++)
+	{
+		pthread_join(thread[i], NULL);
+	}
+	for (int i = 0; i < NB_THREADS; i++)
+	{
+		arg[i].workload = 0;
+	}
+	parallel_mergesort_merge(arr, tmp, 0, size - 1);	// initializing
+
+	//mergesort_recursive(arr, tmp, 0, size - 1);
 
 	free(tmp);
 }
@@ -278,6 +392,7 @@ int main()
 	printf("time taken %f \n", dur.count() * 1.0e3);
 	printf("expected time %f \n", 10000000 / size * dur.count() * 1.0e3);
 
+	std::sort(ref, ref+size);
 /*
 	printf("OUR: ");
 	for(int i=0; i< size; ++i)
@@ -290,7 +405,6 @@ int main()
 
 	printf("\n");
 */
-	std::sort(ref, ref+size);
 	for (int i = 0; i < size; ++i)
 	{
 		if (data[i] != ref[i])
