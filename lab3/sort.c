@@ -26,6 +26,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <pthread.h>
+#include <math.h>
 #include "disable.h"
 
 #ifndef DEBUG
@@ -36,20 +37,27 @@
 #include "sort.h"
 #include "simple_quicksort.h"
 
+//#define NB_THREADS 4
+#define MAX_WORKLOAD 200
+      
 pthread_attr_t attr;
 pthread_t thread[NB_THREADS];
+struct merge_work {
+	int begin;
+	int end;
+};
+typedef struct merge_work merge_work_t;
 
 struct thread_sort_arg
 {
 	int *arr;
-	int begin;
-	int end;
+	int begin[MAX_WORKLOAD];
+	int end[MAX_WORKLOAD];
+	int workload;
 };
 typedef struct thread_sort_arg thread_sort_arg_t;
 
-thread_sort_arg_t arg[NB_THREADS];
 
-#define MAX_WORKLOAD 300
 struct thread_sort_improved_arg
 {
 	int *arr;
@@ -59,19 +67,34 @@ struct thread_sort_improved_arg
 };
 typedef struct thread_sort_improved_arg thread_sort_improved_arg_t;
 
-thread_sort_improved_arg_t arg_improved[NB_THREADS]; 
-
-inline void swap(int *a, int *b)
+struct thread_mergesort_merge_arg
 {
-	int tmp = *a;
-	*a = *b;
-	*b = tmp;
+	int *arr;
+	int *tmp;
+	int toLevel;
+	int work_count;
+	merge_work_t *merge_works;
+	int id;
+};
+typedef struct thread_mergesort_merge_arg thread_mergesort_merge_arg_t;
+
+thread_sort_arg_t arg[NB_THREADS]; 
+thread_sort_improved_arg_t arg_improved[NB_THREADS]; 
+thread_mergesort_merge_arg_t arg_merge[NB_THREADS]; 
+
+
+
+inline void swap(int & a, int & b)
+{
+	int tmp = a;
+	a = b;
+	b = tmp;
 }
 
 void insertionSort(int * arr, int left, int right)
 {
-	int j,i;
-	for (i = left + 1; i < right; ++i)
+	int j;
+	for (int i = left + 1; i < right; ++i)
 	{
 		int tmp = arr[i];
 		for (j = i; j > left && tmp < arr[j - 1]; --j)
@@ -84,13 +107,13 @@ inline int selectPivot(int * arr, int left, int right)
 {
 	int center = (left + right) / 2;
 	if (arr[center] < arr[left])
-		swap(arr + left, arr+ center);
+		swap(arr[left], arr[center]);
 	if (arr[right] < arr[left])
-		swap(arr + left, arr + right);
+		swap(arr[left], arr[right]);
 	if (arr[right] < arr[center])
-		swap(arr + center, arr + right);
+		swap(arr[center], arr[right]);
 
-	swap(arr +center, arr+right - 1);
+	swap(arr[center], arr[right - 1]);
 	return arr[right - 1];
 }
 
@@ -112,12 +135,12 @@ void quicksort(int * arr, int begin, int end)
 		while (arr[--u] > pivot);
 
 		if (l < u)
-			swap(arr+l, arr+u);
+			swap(arr[l], arr[u]);
 		else
 			break;
 	}
 
-	swap(arr+l, arr+end - 1);
+	swap(arr[l], arr[end - 1]);
 
 	quicksort(arr, begin, l);
 	quicksort(arr, l, end);
@@ -156,7 +179,11 @@ void*
 thread_sort(void* arg)
 {
 	thread_sort_arg_t *a = (thread_sort_arg_t *) arg;
-	quicksort(a->arr, a->begin, a->end);
+
+	for (int i = 0; i < a->workload; ++i)
+	{
+		quicksort(a->arr, a->begin[i], a->end[i]);
+	}
 	return NULL;
 }
 
@@ -173,210 +200,179 @@ thread_mergesort(void* arg)
 	return NULL;
 }
 
-void mergesort_recursive(int * arr, int * tmp, int left, int right)
+
+void*
+thread_mergesort_merge(void* arg)
 {
-	/*
-	printf("S: ");
-	for(int i=left; i<=right; ++i)
-		printf("%i ",arr[i]);
-	printf("\n");
-*/
-	if (right - left < 250000)
-	{
-		int size = right - left + 1;
-		int tsize = size / NB_THREADS;
-		int i;
-		//printf("'size' %i \n", size);
-		for (i = 0; i < NB_THREADS; i++)
-		{
-			arg[i].arr = arr;
-			arg[i].begin = left+i*tsize;
-			arg[i].end = arg[i].begin + tsize;
-			if(i == NB_THREADS-1)
-				arg[i].end = right+1;
-			//printf("%i : %i -> %i\n", i, arg[i].begin, arg[i].end);
-			pthread_create(&thread[i], &attr, &thread_sort, (void*) &arg[i]);
-		}
-		for (i = 0; i < NB_THREADS; i++)
-		{
-			pthread_join(thread[i], NULL);
-		}
+	thread_mergesort_merge_arg_t *a = (thread_mergesort_merge_arg_t *) arg;
 
-		i = 1;
-		merge(arr, tmp, arg[i-1].begin, arg[i].begin-1, arg[i].begin, arg[i].end-1);
-		//memcpy(arr+arg[i-1].begin, tmp+arg[i-1].begin, (arg[i].end-arg[i-1].begin)*sizeof(int));
+	int toLevel = a->toLevel;
+	int work_count = a->work_count;
+	merge_work_t *merge_works = a->merge_works;
 
-		i = 3;
-		merge(arr, tmp, arg[i-1].begin, arg[i].begin-1, arg[i].begin, arg[i].end-1);
-		//memcpy(arr+arg[i-1].begin, tmp+arg[i-1].begin, (arg[i].end-arg[i-1].begin)*sizeof(int));
-
-		//memcpy(arr+left, tmp+left, (size)*sizeof(int));
-		merge(tmp,arr , arg[0].begin, arg[1].end-1, arg[2].begin, arg[3].end-1);
-		
-		//memcpy(arr+left, tmp+left, (size)*sizeof(int));
-/*
-		merge(arr, tmp, arg[0].begin, arg[1].begin-1, arg[1].begin, arg[1].end-1);
-		merge(arr, tmp, arg[2].begin, arg[3].begin-1, arg[3].begin, arg[3].end-1);
-
-		merge(tmp, arr, arg[0].begin, arg[1].end-1, arg[2].begin, arg[3].end-1);
-*/
-		//merge(tmp, arr, left, arg[2].begin-1, arg[2].begin, right);
-
-		/*for (int i = 1; i < NB_THREADS; i++)
-		{
-			merge(arr, tmp, left, arg[i].begin-1, arg[i].begin, arg[i].end-1);
-			memcpy(arr+left, tmp+left, (arg[i].end-left)*sizeof(int));
-		}*/
-		//memcpy(arr+left, tmp+left, (size)*sizeof(int));
-
-		return;
-	}
-
-	int center = (left + right) / 2;
-	mergesort_recursive(arr, tmp, left, center);
-	mergesort_recursive(arr, tmp, center+1, right);
-
-	merge(arr, tmp, left, center, center+1, right);
-
-	memcpy(arr+left, tmp+left, (right-left+1)*sizeof(int));
-/*
-	printf("T: ");
-	for(int i=left; i<=right; ++i)
-		printf("%i ",tmp[i]);
-	printf("\n");
-
-	printf("M: ");
-	for(int i=left; i<=right; ++i)
-		printf("%i ",arr[i]);
-	printf("\n");
-	*/
-}
-
-
-#define PARALLELL_MERGESORT_LIMIT 1000
-void parallel_mergesort_init(int * arr, int * tmp, int left, int right)
-{
-
-	if (right - left < PARALLELL_MERGESORT_LIMIT)
-	{
-		int size = right - left + 1;
-		int tsize = size / NB_THREADS;
-		//printf("'size' %i \n", size);
-		int i;
-		for (i = 0; i < NB_THREADS; i++)
-		{
-			int workload = arg_improved[i].workload++;
-			arg_improved[i].begin[workload] = left+i*tsize;
-			arg_improved[i].end[workload] = arg_improved[i].begin[workload] + tsize ;
-			if(i == NB_THREADS-1)
-				arg_improved[i].end[workload] = right+1;
-			//printf("%i : %i -> %i\n", i, arg[i].begin[workload], arg[i].end[workload]);
-		}
-
-		return;
-	}
-	int center = (left + right) / 2;
-	parallel_mergesort_init(arr, tmp, left, center);
-	parallel_mergesort_init(arr, tmp, center+1, right);
-}
-
-void parallel_mergesort_merge(int * arr, int * tmp, int left, int right)
-{
-
-	if (right - left < PARALLELL_MERGESORT_LIMIT)
-	{
-		int size = right - left + 1;
-		int workload = arg_improved[0].workload;
-		int i;
-		for (i = 0; i < NB_THREADS; i++)
-		{
-			arg_improved[i].workload++;
-		}
-
-		i = 1;
-		merge(arr, tmp, arg_improved[i-1].begin[workload], arg_improved[i].begin[workload]-1, 
-			arg_improved[i].begin[workload], arg_improved[i].end[workload]-1);
-		//memcpy(arr+arg[i-1].begin, tmp+arg[i-1].begin, (arg[i].end-arg[i-1].begin)*sizeof(int));
-
-		i = 3;
-		merge(arr, tmp, arg_improved[i-1].begin[workload], arg_improved[i].begin[workload]-1, 
-			arg_improved[i].begin[workload], arg_improved[i].end[workload]-1);
-		//memcpy(arr+arg[i-1].begin, tmp+arg[i-1].begin, (arg[i].end-arg[i-1].begin)*sizeof(int));
-
-		memcpy(arr+left, tmp+left, (size)*sizeof(int));
-		merge(arr, tmp, arg_improved[0].begin[workload], arg_improved[1].end[workload]-1, 
-			arg_improved[2].begin[workload], arg_improved[3].end[workload]-1);
-		
-		memcpy(arr+left, tmp+left, (size)*sizeof(int));
-/*
-		merge(arr, tmp, arg[0].begin, arg[1].begin-1, arg[1].begin, arg[1].end-1);
-		merge(arr, tmp, arg[2].begin, arg[3].begin-1, arg[3].begin, arg[3].end-1);
-
-		merge(tmp, arr, arg[0].begin, arg[1].end-1, arg[2].begin, arg[3].end-1);
-*/
-		//merge(tmp, arr, left, arg[2].begin-1, arg[2].begin, right);
-
-		/*for (int i = 1; i < NB_THREADS; i++)
-		{
-			merge(arr, tmp, left, arg[i].begin-1, arg[i].begin, arg[i].end-1);
-			memcpy(arr+left, tmp+left, (arg[i].end-left)*sizeof(int));
-		}*/
-		//memcpy(arr+left, tmp+left, (size)*sizeof(int));
-
-		return;
-	}
-
-	int center = (left + right) / 2;
-	parallel_mergesort_merge(arr, tmp, left, center);
-	parallel_mergesort_merge(arr, tmp, center+1, right);
-
-	merge(arr, tmp, left, center, center+1, right);
-
-	memcpy(arr+left, tmp+left, (right-left+1)*sizeof(int));
-}
-
-void mergesort_improved(int * arr, int size)
-{
-	int * tmp = (int*)malloc(size * sizeof(int));
-
-	// initializing
 	int i;
-	for (i = 0; i < NB_THREADS; i++)
-	{
-		arg_improved[i].arr = arr;
-		arg_improved[i].workload = 0;
-	}
-	parallel_mergesort_init(arr, tmp, 0, size - 1);	// initializing
+	for(i = 0; i < toLevel; ++i) {
+		int d = pow(2, i +1);
+		int chunk_count = (work_count / d);
 
+		int use_threads = NB_THREADS;
+		if(use_threads % 2 == 1)
+			use_threads--;
 
-	// do the partial sorting
-	for (i = 0; i < NB_THREADS; i++)
-	{
-		pthread_create(&thread[i], &attr, &thread_sort, (void*) &arg_improved[i]);
-	}
-	for (i = 0; i < NB_THREADS; i++)
-	{
-		pthread_join(thread[i], NULL);
-	}
-	for (i = 0; i < NB_THREADS; i++)
-	{
-		arg_improved[i].workload = 0;
-	}
-	parallel_mergesort_merge(arr, tmp, 0, size - 1);	// initializing
+		int sep = chunk_count / use_threads;
+		int k_start = a->id * sep;
+		int k_stop = ((a->id+1))*sep;
 
-	//mergesort_recursive(arr, tmp, 0, size - 1);
+		//printf("[%i] %i -> %i \n", a->id, k_start, k_stop);
+		// printf("usingk[%i] \n", use_threads);
+		int k;
+		for(k = k_start; k < k_stop; ++k) {
+			int left_begin_id = k * d;
+			int right_end_id = (k+1) * d-1;
+			int center = (right_end_id + left_begin_id) / 2;
+			int left_end_id = center;
+			int right_begin_id = center +1;
 
-	free(tmp);
+			int left_begin_index = merge_works[left_begin_id].begin;
+			int left_end_index = merge_works[left_end_id].end -1;
+			int right_begin_index = merge_works[right_begin_id].begin;
+			int right_end_index = merge_works[right_end_id].end -1;
+
+			merge(a->arr, a->tmp, left_begin_index, left_end_index, right_begin_index, right_end_index);
+			memcpy(a->arr+left_begin_index, a->tmp+left_begin_index, (right_end_index-left_begin_index+1)*sizeof(int));
+		}
+	}
+	return NULL;
 }
 
-void mergesort(int * arr, int size)
+
+#define MIN_WORK 10000
+#define MAX_WORKGROUP_SIZE 100000
+void mergesort_flat(int * arr, int size)
 {
 	int * tmp = (int*)malloc(size * sizeof(int));
+	
+	if(size <= MIN_WORK || NB_THREADS == 1)
+	{
+		quicksort(arr, 0, size);
+		return;
+	}
+	
+	int i=0;
+	int workgroup_count = ceil(size / MAX_WORKGROUP_SIZE);
+//	if(NB_THREADS % 2 == 0 && workgroup_count % 2 != 0)
+//		workgroup_count++;
+	int work_count = workgroup_count * NB_THREADS;
+	work_count = pow(2, ceil(log(work_count)/log(2)));
+	int work_size = size / work_count;
+	
+	//printf("WG_COUNT %i, W_COUNT %i, W_SIZE %i\n", workgroup_count, work_count, work_size);
 
-	mergesort_recursive(arr, tmp, 0, size - 1);
 
-	free(tmp);
+
+	merge_work_t * merge_works = (merge_work_t*)malloc(work_count * sizeof(merge_work_t));
+	
+	// The work should be done in parallel
+	for(i=0; i<work_count; ++i)
+	{
+		int id = i%NB_THREADS;
+		int workload = arg_improved[id].workload++;
+		arg_improved[id].arr = arr;
+		arg_improved[id].begin[workload] = 0+i*work_size;
+		arg_improved[id].end[workload] = arg_improved[id].begin[workload] + work_size;
+
+		if(i == work_count-1) {
+			arg_improved[id].end[workload] = size;
+		}
+
+		merge_works[i].begin = arg_improved[id].begin[workload];
+		merge_works[i].end = arg_improved[id].end[workload];
+		
+	//	printf("WORK: t_id %i, workload %i, begin %i, end %i \n", id, workload, arg_improved[id].begin[workload], arg_improved[id].end[workload]); 
+				
+	}
+
+	int levels = ceil(log2(work_count));
+	//printf("levels: %i\n", levels);
+	
+	// do the partial sorting
+	
+	for (i = 0; i < NB_THREADS; i++)
+		pthread_create(&thread[i], &attr, &thread_mergesort, (void*) &arg_improved[i]);
+	for (i = 0; i < NB_THREADS; i++)
+		pthread_join(thread[i], NULL);
+
+	int use_threads = NB_THREADS;
+	if(use_threads % 2 == 1)
+		use_threads--;
+
+	int split_level = levels - ceil(log2(use_threads));
+	//printf("split_level: %i\n", split_level);
+
+	for(i=0; i<use_threads; ++i)
+	{
+		arg_merge[i].arr = arr;
+		arg_merge[i].tmp = tmp;
+		arg_merge[i].merge_works = merge_works;
+		arg_merge[i].work_count = work_count;
+		arg_merge[i].toLevel = split_level;
+		arg_merge[i].id = i;
+
+		pthread_create(&thread[i], &attr, &thread_mergesort_merge, (void*) &arg_merge[i]);	
+		//pthread_join(thread[i], NULL);
+	}
+	//
+	for (i = 0; i < use_threads; i++)
+		pthread_join(thread[i], NULL);
+
+	
+	// merge
+	
+
+	int start_level = split_level;
+	if(split_level < 0)
+		start_level = 0;
+	for(i = start_level; i < levels; ++i) {
+		int d = pow(2, i +1);
+		int chunk_count = (work_count / d);
+		int k;
+		for(k = 0; k < chunk_count; ++k) {
+
+			int left_begin_id = k * d;
+			int right_end_id = (k+1) * d-1;
+			int center = (right_end_id + left_begin_id) / 2;
+			int left_end_id = center;
+			int right_begin_id = center +1;
+
+			int left_begin_index = merge_works[left_begin_id].begin;
+			int left_end_index = merge_works[left_end_id].end -1;
+			int right_begin_index = merge_works[right_begin_id].begin;
+			int right_end_index = merge_works[right_end_id].end -1;
+			
+			//printf("left_begin_id: %i, left_end_id: %i, right_begin_id:%i, right_end_id:%i\n",left_begin_id, left_end_id, right_begin_id, right_end_id);
+
+			//int left_index = merge_works[left_chunk].begin;
+			//int right_index = merge_works[right_chunk].end;
+
+			merge(arr, tmp, left_begin_index, left_end_index, right_begin_index, right_end_index);
+			
+			//printf("left_begin_index: %i, left_end_index: %i, right_begin_index:%i, right_end_index:%i\n",left_begin_index, left_end_index, right_begin_index, right_end_index);
+			memcpy(arr+left_begin_index, tmp+left_begin_index, (right_end_index-left_begin_index+1)*sizeof(int));
+
+
+			//printf("Level: %i, left_begin_id: %i, left_end_id:%i \n", i, left_begin_id, left_end_id);
+			//printf("Level: %i, right_begin_id: %i, right_end_id:%i \n", i, right_begin_id, right_end_id);
+
+			//printf("\n");
+			//printf("Idn: %i, left: %i, right:%i \n", i, left_index, right_index);
+		}
+	}
+	
+
+
+
 }
+
 
 int
 sort(struct array * array)
