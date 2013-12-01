@@ -1,0 +1,57 @@
+QUESTION: How many cores will simple.cu use, max, as written?
+16
+
+QUESTION: Is the calculated square root identical to what the CPU calculates? Should we asume that this is always the case?
+No, the precision is not the same.
+
+QUESTION: How do you calculate the index in the array, using 2-dimensional blocks?
+int index = threadIdx.y * blockDim.x + threadIdx.x;
+
+or
+
+int index_x = blockIdx.x * blockDim.x + threadIdx.x;    
+int index_y = blockIdx.y * blockDim.y + threadIdx.y;
+int grid_width = gridDim.x * blockDim.x;
+
+//get the global index 
+int global_idx = index_y * grid_width + index_x;
+
+
+QUESTION: What happens if you use too many threads per block? (Hint: You can get misleading output if you don't clear your buffers.)
+The answers get incorrect
+
+QUESTION: At what data size is the GPU faster than the CPU?
+without alloc and copy: >64*64
+with alloc and copy: 512*512 > N*N >256*256
+
+QUESTION: What block size seems like a good choice? Compared to what?
+block size of 16*16 gives the best compute performance compared to 8*8 and 32*32.
+
+QUESTION: Write down your data size, block size and timing data for the best GPU performance you can get.
+Problem size (N): 4096
+blocksize: 16
+grid_N: 256
+Cuda elapsed time (copy): 44.861794
+Cuda elapsed time (    ): 1.456832
+
+
+QUESTION: How much performance did you lose by making data accesses non-coalesced?
+Cuda elapsed time (copy): 60.549057
+Cuda elapsed time (    ): 15.250944
+
+Cuda elapsed time (copy): 44.447105
+Cuda elapsed time (    ): 1.459840
+
+
+JULIA:
+worst: 103.285599
+move malloc: no improv
+16*16 block size: 3.076480
+
+QUESTION: What was the problem?
+One thread per block
+QUESTION: How did you correct it?
+256 threads per block
+
+QUESTION: What speedup did you get?
+x33.57 speedup
